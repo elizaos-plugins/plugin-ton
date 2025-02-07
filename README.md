@@ -105,12 +105,12 @@ The `CreateTonWallet` action handles on-demand wallet creation with encrypted ke
 import { CreateTonWallet } from "@elizaos/plugin-ton";
 
 // Initialize transfer action
-const action = new CreateTonWallet(walletProvider);
+const action = new CreateTonWallet(runtime);
 
 // Execute transfer
-const hash = await action.createNewWallet({
-    recipient: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
-    amount: "1.5",
+const { walletAddress, mnemonic } = await action.createNewWallet({
+    rpcUrl: "https://toncenter.com/api/v2/jsonRPC",
+    encryptionPassword: "GAcAWFv6ZXuaJOuSqemxku4",
 });
 ```
 

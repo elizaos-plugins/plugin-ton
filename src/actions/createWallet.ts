@@ -85,9 +85,9 @@ export class CreateWalletAction {
         this.runtime = runtime;
     }
 
-    async createWallet(rpcUrl: string, encryptionPassword: string): Promise<{walletAddress: string, mnemonic: string[]}> {
+    async createWallet(params: {rpcUrl: string, encryptionPassword: string}): Promise<{walletAddress: string, mnemonic: string[]}> {
 
-        const { walletProvider, mnemonic } = await WalletProvider.generateNew(rpcUrl, encryptionPassword, this.runtime.cacheManager);
+        const { walletProvider, mnemonic } = await WalletProvider.generateNew(params.rpcUrl, params.encryptionPassword, this.runtime.cacheManager);
         const walletAddress = walletProvider.getAddress();
         return {walletAddress, mnemonic};
     }
@@ -126,7 +126,7 @@ export default {
             const rpcUrl = runtime.getSetting("TON_RPC_URL") || "https://toncenter.com/api/v2/jsonRPC";
             const action = new CreateWalletAction(runtime);
 
-            const { walletAddress, mnemonic } = await action.createWallet(rpcUrl, createWalletContent.encryptionPassword);
+            const { walletAddress, mnemonic } = await action.createWallet({rpcUrl, encryptionPassword: createWalletContent.encryptionPassword});
             const result = {
                 status: "success",
                 walletAddress,
