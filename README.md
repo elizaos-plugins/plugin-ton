@@ -97,6 +97,23 @@ const hash = await action.transfer({
 });
 ```
 
+### Create Ton Wallet Action
+
+The `CreateTonWallet` action handles on-demand wallet creation with encrypted key storage from user-supplied encryption key:
+
+```typescript
+import { CreateTonWallet } from "@elizaos/plugin-ton";
+
+// Initialize transfer action
+const action = new CreateTonWallet(walletProvider);
+
+// Execute transfer
+const hash = await action.createNewWallet({
+    recipient: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
+    amount: "1.5",
+});
+```
+
 ## Development
 
 ### Building
