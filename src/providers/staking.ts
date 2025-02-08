@@ -1,4 +1,4 @@
-import { Address, OpenedContract, SendMode, TonClient } from "@ton/ton";
+import { Address, fromNano, OpenedContract, SendMode, TonClient } from "@ton/ton";
 import { IAgentRuntime, Provider, Memory, State, elizaLogger } from "@elizaos/core";
 import { internal } from "@ton/ton";
 import { initWalletProvider, WalletProvider } from "./wallet";
@@ -7,7 +7,6 @@ import { StakeContent } from "../actions/stake";
 import { PlatformFactory } from "../services/staking/platformFactory.ts";
 import { TonWhalesStrategy } from "../services/staking/strategies/tonWhales.ts";
 import { HipoStrategy } from "../services/staking/strategies/hipo.ts";
-import platformAddresses from '../services/staking/stakingPoolAddresses.json';
 
 // Define types for pool info and transaction results.
 // export interface PoolInfo {
@@ -131,16 +130,20 @@ export class StakingProvider implements IStakingProvider {
     }
 
     async getPortfolio(): Promise<string> {
+        const walletAddress = Address.parse(this.walletProvider.getAddress());
+        
         let portfolioString = ``
 
-        const stakingPools = Object.values(platformAddresses).flat();
-        await Promise.all(stakingPools.map(async pool=>{
-            const strategy = PlatformFactory.getStrategy(Address.parse(pool))
+        const stakingPoolAddresses = PlatformFactory.getAllAddresses();
+        await Promise.all(stakingPoolAddresses.map(async poolAddress=>{
+            const strategy = PlatformFactory.getStrategy(poolAddress);
             if(!strategy) return;
-            const tonStaked = await strategy.getStakedTon(Address.parse(this.walletProvider.getAddress()), Address.parse(pool));
 
-            if(tonStaked == BigInt(0)) return;
-            portfolioString += `TON staked on ${pool}: ${tonStaked}\n`
+            const stakedTon = await strategy.getStakedTon(walletAddress, poolAddress);
+
+            if(!stakedTon) return;
+
+            portfolioString += `Pool ${poolAddress.toString()} = ${fromNano(stakedTon)}`
         }))
 
         return `TON Staking Portfolio: ${portfolioString}\n`
