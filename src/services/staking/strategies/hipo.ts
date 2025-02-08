@@ -59,9 +59,10 @@ async function getExchangeRate(
 }
 
 function calculateJettonsToTon(jettons: bigint, rate: number): bigint {
+    console.info(jettons)
     return !rate || !jettons
         ? BigInt(0)
-        : BigInt(toNano(Number(jettons) * (1 / rate)));
+        : BigInt(toNano(Number(fromNano(jettons)) * (1 / rate)));
 }
 
 export class HipoStrategy implements StakingPlatform {
