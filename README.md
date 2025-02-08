@@ -99,7 +99,8 @@ const hash = await action.transfer({
 
 ### Auction Interaction Action
 The `AuctionInteractionTon` action handles Auction interactions
-![images/Screenshot-auction-data](images/Screenshot-auction-data)
+![batch-transfer-image](images/Screenshot-batch-transfer.png)
+![auction-data](images/Screenshot-auction-data.png)
 ```typescript
 import { AuctionInteractionActionTon } from "@elizaos/plugin-ton";
 
