@@ -180,7 +180,7 @@ const buildTransferNFTContent = async (
     const content = await generateObject({
         runtime,
         context: transferContext,
-        schema: transferNFTSchema,
+        schema: transferNFTSchema as any,
         modelClass: ModelClass.SMALL,
     });
 
