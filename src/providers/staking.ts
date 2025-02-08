@@ -8,6 +8,7 @@ import { PlatformFactory } from "../services/staking/platformFactory.ts";
 import { TonWhalesStrategy } from "../services/staking/strategies/tonWhales.ts";
 import { HipoStrategy } from "../services/staking/strategies/hipo.ts";
 import { PoolInfo } from "../services/staking/interfaces/pool.ts";
+import { formatTON, truncateTONAddress } from "../utils/formatting.ts";
 
 // Define types for pool info and transaction results.
 // export interface PoolInfo {
@@ -116,39 +117,25 @@ export class StakingProvider implements IStakingProvider {
     }
 
     formatPoolInfo(poolInfo: PoolInfo): string {
-        // Helper function to truncate address
-        const truncateAddress = (address: Address) => {
-            const addressString = address.toString()
-            if (addressString.length <= 12) return addressString;
-            return `${addressString.slice(0, 6)}...${addressString.slice(-6)}`;
-        };
-    
-        // Helper function to format numbers with 2 decimal places
-        const formatNumber = (value: bigint) => {
-            const num = parseFloat(fromNano(value));
-            return num.toFixed(2);
-        };
-    
         return [
-            `Pool Address: ${truncateAddress(poolInfo.address)}`,
+            `Pool Address: ${truncateTONAddress(poolInfo.address)}`,
             '',
             'Parameters',
             '───────────',
-            `Min Stake:     ${formatNumber(poolInfo.min_stake)} TON`,
-            `Deposit Fee:   ${formatNumber(poolInfo.deposit_fee)} TON`,
-            `Withdraw Fee:  ${formatNumber(poolInfo.withdraw_fee)} TON`,
+            `Min Stake:     ${formatTON(poolInfo.min_stake)} TON`,
+            `Deposit Fee:   ${formatTON(poolInfo.deposit_fee)} TON`,
+            `Withdraw Fee:  ${formatTON(poolInfo.withdraw_fee)} TON`,
             '',
             'Current Status',
             '─────────────',
-            `Balance:          ${formatNumber(poolInfo.balance)} TON`,
-            `Pending Deposits: ${formatNumber(poolInfo.pending_deposits)} TON`,
-            `Pending Withdraws: ${formatNumber(poolInfo.pending_withdraws)} TON`
+            `Balance:          ${formatTON(poolInfo.balance)} TON`,
+            `Pending Deposits: ${formatTON(poolInfo.pending_deposits)} TON`,
+            `Pending Withdraws: ${formatTON(poolInfo.pending_withdraws)} TON`
         ].join('\n');
     }
     
     async getPoolInfo(poolId: string): Promise<any> {
         const poolAddress = Address.parse(poolId);
-        console.info(poolAddress)
 
         try {
             // Call a contract method that queries pool information.
@@ -163,23 +150,50 @@ export class StakingProvider implements IStakingProvider {
 
     async getPortfolio(): Promise<string> {
         const walletAddress = Address.parse(this.walletProvider.getAddress());
-        
-        let portfolioString = ``
-
+    
+        // Collect all staking positions
+        const stakingPositions: { poolAddress: string; amount: string }[] = [];
         const stakingPoolAddresses = PlatformFactory.getAllAddresses();
-        await Promise.all(stakingPoolAddresses.map(async poolAddress=>{
-            const strategy = PlatformFactory.getStrategy(poolAddress);
-            if(!strategy) return;
-
-            const stakedTon = await strategy.getStakedTon(walletAddress, poolAddress);
-
-            if(!stakedTon) return;
-
-            portfolioString += `Pool ${poolAddress.toString()} = ${fromNano(stakedTon)}`
-        }))
-
-        return `TON Staking Portfolio: ${portfolioString}\n`
+    
+        await Promise.all(
+            stakingPoolAddresses.map(async poolAddress => {
+                const strategy = PlatformFactory.getStrategy(poolAddress);
+                if (!strategy) return;
+    
+                const stakedTon = await strategy.getStakedTon(walletAddress, poolAddress);
+                if (!stakedTon) return;
+    
+                stakingPositions.push({
+                    poolAddress: truncateTONAddress(poolAddress),
+                    amount: formatTON(stakedTon)
+                });
+            })
+        );
+    
+        // If no staking positions found
+        if (stakingPositions.length === 0) {
+            return 'TON Staking Portfolio: No active staking positions found';
+        }
+    
+        // Calculate total staked
+        const totalStaked = stakingPositions
+            .reduce((sum, pos) => sum + parseFloat(pos.amount), 0)
+            .toFixed(2);
+    
+        // Format the output
+        const positions = stakingPositions
+            .map(pos => `Pool ${pos.poolAddress}: ${pos.amount} TON`)
+            .join('\n');
+    
+        return [
+            'TON Staking Portfolio',
+            '───────────────────',
+            positions,
+            '',
+            `Total Staked: ${totalStaked} TON`
+        ].join('\n');
     }
+    
 }
 
 // Initializes the staking provider using settings from the runtime.
@@ -231,8 +245,11 @@ export const nativeStakingProvider: Provider = {
 
             const stakingPortfolio = await stakingProvider.getPortfolio();
             
-            console.log(stakingPortfolio);
-            return stakingPortfolio;
+            const poolAddresses = await PlatformFactory.getAllAddresses();
+
+            const providerString = `Portfolio: ${stakingPortfolio}\n Available Staking Pool Addresses: [ ${poolAddresses.map(e=>e.toString()).join(' | ')} ]`
+            console.info(providerString)
+            return providerString;
         } catch (error) {
             console.error("Error in staking provider:", error);
             return null;
