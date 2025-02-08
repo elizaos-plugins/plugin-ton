@@ -99,6 +99,7 @@ const hash = await action.transfer({
 
 ### BatchTransferAction
 The `BatchTransferAction` handles transfers of NFTs, Jettons and TON in a single transaction:
+![batch-transfer-image](images/Screenshot-batch-transfer.png)
 ```typescript
 import { BatchTransferTokens } from "@elizaos/plugin-ton";
 
