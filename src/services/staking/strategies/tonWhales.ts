@@ -2,26 +2,14 @@ import { Address, beginCell, Dictionary, fromNano, MessageRelaxed, Slice, toNano
 import { StakingPlatform } from "../interfaces/stakingPlatform.ts";
 import { internal } from "@ton/ton";
 import { WalletProvider } from "../../../providers/wallet.ts";
-
-interface MemberData {
-    address: Address;      
-    profit_per_coin: bigint;
-    balance: bigint;
-    pending_withdraw: bigint;
-    pending_withdraw_all: boolean;
-    pending_deposit: bigint;
-    member_withdraw: bigint;
-}
-
-type MemberList = MemberData[];
-
+import { PoolMemberData, PoolMemberList } from "../interfaces/pool.ts";
 
 function generateQueryId() {
     // Generate a query ID that's unique for this transaction
     return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
 }
 
-function parseMembersRaw(stack: any): MemberList {
+function parseMembersRaw(stack: any): PoolMemberList {
     const cell = stack.items[0].cell;
     
     const dict = Dictionary.loadDirect(
@@ -57,7 +45,7 @@ function parseMembersRaw(stack: any): MemberList {
         cell
     );
 
-    const members: MemberList = [];
+    const members: PoolMemberList = [];
     
     for (const [key, value] of dict) {
         // Convert key to proper hex format
@@ -167,7 +155,7 @@ export class TonWhalesStrategy implements StakingPlatform {
             return intMessage;
         }
 
-        private async getMemberData(address: Address, poolAddress: Address) : Promise<MemberData | null> {
+        private async getMemberData(address: Address, poolAddress: Address) : Promise<PoolMemberData | null> {
             const result = await this.tonClient.runMethod(
                 poolAddress, 
                 "get_members_raw"
