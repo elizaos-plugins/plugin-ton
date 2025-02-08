@@ -97,6 +97,17 @@ const hash = await action.transfer({
 });
 ```
 
+### Auction Interaction Action
+The `AuctionInteractionTon` action handles Auction interactions
+![auction-data](screenshit/auction-data.png)
+```typescript
+import { AuctionInteractionActionTon } from "@elizaos/plugin-ton";
+
+// Initialize transfer action
+const action = new AuctionInteractionActionTon(walletProvider);
+
+result = await auctionAction.getAuctionData(auctionAddress);
+```
 ## Development
 
 ### Building
