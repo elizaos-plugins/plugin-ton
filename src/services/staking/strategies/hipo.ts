@@ -14,7 +14,8 @@ import { internal } from "@ton/ton";
 import { WalletProvider } from "../../../providers/wallet.ts";
 import { elizaLogger } from "@elizaos/core";
 
-import { Treasury, Wallet, Parent, TreasuryConfig } from "./hipo/sdk/index.ts";
+import { Treasury, Wallet, Parent, TreasuryConfig, feeStake, feeUnstake } from "./hipo/sdk/index.ts";
+import { PoolInfo } from "../interfaces/pool.ts";
 
 async function getTreasuryState(
     tonClient: TonClient,
@@ -101,11 +102,19 @@ export class HipoStrategy implements StakingPlatform {
         return calculateJettonsToTon(walletState.tokens, rate);
     }
 
-    async getPoolInfo(poolAddress: Address): Promise<any> {
+    async getPoolInfo(poolAddress: Address): Promise<PoolInfo> {
         try {
             const result = await getTreasuryState(this.tonClient, poolAddress);
 
-            return result;
+            return {
+                address: poolAddress,
+                min_stake: BigInt(0),
+                deposit_fee: feeStake,
+                withdraw_fee: feeUnstake,
+                balance: result.totalCoins,
+                pending_deposits: result.totalStaking,
+                pending_withdraws: result.totalUnstaking
+            };
         } catch (error) {
             console.error("Error fetching Hipo pool info:", error);
             throw error;

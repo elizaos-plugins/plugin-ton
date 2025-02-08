@@ -7,6 +7,7 @@ import { StakeContent } from "../actions/stake";
 import { PlatformFactory } from "../services/staking/platformFactory.ts";
 import { TonWhalesStrategy } from "../services/staking/strategies/tonWhales.ts";
 import { HipoStrategy } from "../services/staking/strategies/hipo.ts";
+import { PoolInfo } from "../services/staking/interfaces/pool.ts";
 
 // Define types for pool info and transaction results.
 // export interface PoolInfo {
@@ -114,15 +115,46 @@ export class StakingProvider implements IStakingProvider {
         }
     }
 
+    formatPoolInfo(poolInfo: PoolInfo): string {
+        // Helper function to truncate address
+        const truncateAddress = (address: Address) => {
+            const addressString = address.toString()
+            if (addressString.length <= 12) return addressString;
+            return `${addressString.slice(0, 6)}...${addressString.slice(-6)}`;
+        };
+    
+        // Helper function to format numbers with 2 decimal places
+        const formatNumber = (value: bigint) => {
+            const num = parseFloat(fromNano(value));
+            return num.toFixed(2);
+        };
+    
+        return [
+            `Pool Address: ${truncateAddress(poolInfo.address)}`,
+            '',
+            'Parameters',
+            '───────────',
+            `Min Stake:     ${formatNumber(poolInfo.min_stake)} TON`,
+            `Deposit Fee:   ${formatNumber(poolInfo.deposit_fee)} TON`,
+            `Withdraw Fee:  ${formatNumber(poolInfo.withdraw_fee)} TON`,
+            '',
+            'Current Status',
+            '─────────────',
+            `Balance:          ${formatNumber(poolInfo.balance)} TON`,
+            `Pending Deposits: ${formatNumber(poolInfo.pending_deposits)} TON`,
+            `Pending Withdraws: ${formatNumber(poolInfo.pending_withdraws)} TON`
+        ].join('\n');
+    }
+    
     async getPoolInfo(poolId: string): Promise<any> {
         const poolAddress = Address.parse(poolId);
+        console.info(poolAddress)
 
         try {
             // Call a contract method that queries pool information.
             const strategy = PlatformFactory.getStrategy(poolAddress);
             const info = await strategy.getPoolInfo(poolAddress);
-            console.log(info);
-            return info;
+            return this.formatPoolInfo(info);
         } catch (error: any) {
             console.error("Error fetching pool info:", error);
             throw error;

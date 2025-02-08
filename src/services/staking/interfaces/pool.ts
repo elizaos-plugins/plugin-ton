@@ -19,5 +19,5 @@ export interface PoolInfo {
     withdraw_fee: bigint;
     balance: bigint;
     pending_deposits: bigint;
-    pending_withdraw: bigint;
+    pending_withdraws: bigint;
 }

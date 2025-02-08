@@ -118,7 +118,7 @@ export default {
 
             if (callback) {
                 callback({
-                    text: `Successfully fetched pool info for ${poolInfoDetails.poolId}.`,
+                    text: `Successfully fetched pool info: \n${poolInfo}`,
                     content: poolInfo,
                 });
             }
