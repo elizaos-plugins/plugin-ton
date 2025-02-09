@@ -97,6 +97,32 @@ const hash = await action.transfer({
 });
 ```
 
+### BatchTransferAction
+The `BatchTransferAction` handles transfers of NFTs, Jettons and TON in a single transaction:
+![batch-transfer-image](images/Screenshot-batch-transfer.png)
+```typescript
+import { BatchTransferTokens } from "@elizaos/plugin-ton";
+
+// Initialize transfer action
+const action = new BatchTransferTokens(walletProvider);
+const batchTransfers = {
+    transfers: [
+        {
+            type: "ton",
+            recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
+            amount: "0.1"
+        },
+        {
+            type: "token",
+            recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
+            tokenInd: "0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5",
+            amount: "1"
+        }
+    ]
+}
+const reports = await batchTransferAction.createBatchTransfer(batchTransfers);
+```
+
 ## Development
 
 ### Building
