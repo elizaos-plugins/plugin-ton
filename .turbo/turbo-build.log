@@ -1,18 +1,26 @@
 
-
-> @elizaos/plugin-ton@0.1.8+build.1 build /Users/a/eliza-wrangler/packages/plugin-ton
+Debugger listening on ws://127.0.0.1:55012/e234d5a3-380e-4baf-ba01-11ea4c95a71b
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger attached.
+
+> @elizaos/plugin-ton@0.1.9 build /Users/allenhsu/Documents/ton/eliza/packages/plugin-ton
 > tsup --format esm --dts
 
+Debugger listening on ws://127.0.0.1:55014/c1b37a20-71a5-489c-90f3-ea7b13a336b9
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger attached.
 [34mCLI[39m Building entry: src/index.ts
 [34mCLI[39m Using tsconfig: tsconfig.json
 [34mCLI[39m tsup v8.3.5
-[34mCLI[39m Using tsup config: /Users/a/eliza-wrangler/packages/plugin-ton/tsup.config.ts
+[34mCLI[39m Using tsup config: /Users/allenhsu/Documents/ton/eliza/packages/plugin-ton/tsup.config.ts
 [34mCLI[39m Target: esnext
 [34mCLI[39m Cleaning output folder
 [34mESM[39m Build start
-[32mESM[39m [1mdist/index.js     [22m[32m126.64 KB[39m
-[32mESM[39m [1mdist/index.js.map [22m[32m258.80 KB[39m
-[32mESM[39m ⚡️ Build success in 58ms
+[32mESM[39m [1mdist/index.js     [22m[32m158.38 KB[39m
+[32mESM[39m [1mdist/index.js.map [22m[32m326.02 KB[39m
+[32mESM[39m ⚡️ Build success in 31ms
 DTS Build start
-DTS ⚡️ Build success in 4321ms
-DTS dist/index.d.ts 1.59 KB
+DTS ⚡️ Build success in 2873ms
+DTS dist/index.d.ts 1.72 KB
+Waiting for the debugger to disconnect...
+Waiting for the debugger to disconnect...
