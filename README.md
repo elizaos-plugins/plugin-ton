@@ -16,6 +16,8 @@ This plugin provides functionality to:
 
 ![alt text](./screenshot/transfer.png "Transfer TON")
 
+![lending](./screenshot/lending_info.png "Get lending info for TON")
+
 ### Quick Start
 
 ```bash
