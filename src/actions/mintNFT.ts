@@ -169,7 +169,7 @@ const buildMintDetails = async (
   const content = await generateObject({
     runtime,
     context: mintContext,
-    schema: mintNFTSchema,
+    schema: mintNFTSchema as any,
     modelClass: ModelClass.SMALL,
   });
 

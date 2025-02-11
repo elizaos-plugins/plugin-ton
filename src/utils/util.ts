@@ -1,10 +1,10 @@
-import { beginCell, Cell, internal, SendMode } from "@ton/ton";
+import { Address, beginCell, Cell, internal, SendMode } from "@ton/ton";
 import pinataSDK from "@pinata/sdk";
 
 import { readdirSync } from "fs";
 import { writeFile, readFile } from "fs/promises";
 import path from "path";
-import { MintParams } from "./NFTCollection";
+// import { MintParams } from "./NFTCollection";
 export const sleep = async (ms: number) => {
     await new Promise((resolve) => setTimeout(resolve, ms));
 };
@@ -126,3 +126,30 @@ export async function topUpBalance(
 
     return seqno;
   }
+
+  export async function waitSeqnoContract(seqno: number, contract) {
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await sleep(2000);
+      console.log("Transaction sent, still waiting for confirmation...")
+
+      const seqnoAfter: number = await contract.getSeqno();
+      if (seqnoAfter == seqno + 1) break;
+    }
+  }
+  
+
+  export function sanitizeTonAddress(input: string, bounceable?: boolean, testOnly?: boolean): string | null {
+    try {
+        // Parse the input into a normalized address
+        const address = Address.parse(input);
+
+        // Convert to the desired format based on the provided flags
+        const sanitizedAddress = address.toString({ bounceable: bounceable ?? false, testOnly: testOnly ?? false });
+
+        return sanitizedAddress;
+    } catch (error) {
+        console.error("Invalid TON address:", error.message);
+        return null; // Return null if the address is invalid
+    }
+}

@@ -154,7 +154,7 @@ const buildTransferDetails = async (
     const content = await generateObject({
         runtime,
         context: transferContext,
-        schema: transferSchema,
+        schema: transferSchema as any,
         modelClass: ModelClass.SMALL,
     });
 
