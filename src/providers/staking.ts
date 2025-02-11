@@ -66,10 +66,12 @@ export class StakingProvider implements IStakingProvider {
             // Retrieve the wallet's current sequence number.
             const seqno: number = await this.contract.getSeqno();
 
-            // Construct the staking message.
-            // The 'internal' helper formats the message for proper on-chain transfers.
-            // Here we send the specified amount with a "STAKE" instruction in the body.
             const strategy = PlatformFactory.getStrategy(poolAddress);
+
+            // Check if what we stake surpasses min stake
+            const minStake = (await strategy.getPoolInfo(poolAddress)).min_stake;
+
+            if(minStake > amount) throw new Error(`Minimum stake is ${minStake}`);
 
             const stakeMessage = await strategy.createStakeMessage(poolAddress, amount);
 
@@ -98,6 +100,11 @@ export class StakingProvider implements IStakingProvider {
             const seqno: number = await this.contract.getSeqno();
 
             const strategy = PlatformFactory.getStrategy(poolAddress);
+
+            // Check for staking balance
+            const stakedTon = await strategy.getStakedTon(Address.parse(this.walletProvider.getAddress()), poolAddress);
+            if(stakedTon <= 0) throw new Error("No TON staked in the provided pool");
+
             const unstakeMessage = await strategy.createUnstakeMessage(poolAddress, amount);
 
             const transfer = await this.contract.createTransfer({
