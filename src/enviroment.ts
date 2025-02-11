@@ -5,12 +5,14 @@ export const CONFIG_KEYS = {
     TON_PRIVATE_KEY: "TON_PRIVATE_KEY",
     TON_RPC_URL: "TON_RPC_URL",
     TON_RPC_API_KEY: "TON_RPC_API_KEY",
+    TON_CONNECT: "TON_CONNECT",
 };
 
 export const envSchema = z.object({
     TON_PRIVATE_KEY: z.string().min(1, "Ton private key is required"),
     TON_RPC_URL: z.string(),
     TON_RPC_API_KEY: z.string(),
+    TON_CONNECT_MANIFEST_URL: z.string(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
