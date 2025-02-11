@@ -93,10 +93,10 @@ const buildUnstakeDetails = async (
 };
 
 export default {
-    name: "UNSTAKE_TON",
+    name: "WITHDRAW_TON",
     similes: ["UNSTAKE_TOKENS", "WITHDRAW_TON", "TON_UNSTAKE"],
     description:
-        "Unstake TON tokens from a specified pool. {Pay special attention to the request, and make sure the message is not asking to stake.",
+        "Withdraw TON tokens from a specified pool.",
     handler: async (
         runtime: IAgentRuntime,
         message: Memory,
@@ -104,7 +104,7 @@ export default {
         options: any,
         callback?: HandlerCallback
     ) => {
-        elizaLogger.log("Starting UNSTAKE_TON handler...");
+        elizaLogger.log("Starting WITHDRAW_TON handler...");
         const unstakeDetails = await buildUnstakeDetails(
             runtime,
             message,
@@ -112,7 +112,7 @@ export default {
         );
 
         if (!isUnstakeContent(unstakeDetails)) {
-            elizaLogger.error("Invalid content for UNSTAKE_TON action.");
+            elizaLogger.error("Invalid content for WITHDRAW_TON action.");
             if (callback) {
                 callback({
                     text: "Invalid unstake details provided.",
@@ -157,15 +157,15 @@ export default {
             {
                 user: "{{user1}}",
                 content: {
-                    text: "Unstake 1 TON from pool pool123",
-                    action: "UNSTAKE_TON",
+                    text: "Withdraw 1 TON from pool pool123",
+                    action: "WITHDRAW_TON",
                 },
             },
             {
                 user: "{{user2}}",
                 content: {
                     text: "I'll unstake 1 TON now...",
-                    action: "UNSTAKE_TON",
+                    action: "WITHDRAW_TON",
                 },
             },
             {
@@ -180,14 +180,14 @@ export default {
                 user: "{{user1}}",
                 content: {
                     text: "withdraw 12 TON from pool eqw237595asd432",
-                    action: "UNSTAKE_TON",
+                    action: "WITHDRAW_TON",
                 },
             },
             {
                 user: "{{user2}}",
                 content: {
                     text: "Withdrawing 12 TON right now...",
-                    action: "UNSTAKE_TON",
+                    action: "WITHDRAW_TON",
                 },
             },
             {

@@ -26,13 +26,13 @@ const getPoolInfoTemplate = `Respond with a JSON markdown block containing only 
 Example response:
 \`\`\`json
 {
-    "poolId": "pool123"
+    "poolId": string
 }
 \`\`\`
 
 {{recentMessages}}
 
-Given the recent messages, extract the pool identifier (poolId) for which to fetch staking pool information.
+Given the recent messages, extract the pool identifier (TON address) for which to fetch staking pool information.
 
 Respond with a JSON markdown block containing only the extracted value.`;
 
@@ -43,7 +43,7 @@ export class GetPoolInfoAction {
         elizaLogger.log(`Fetching pool info for pool (${params.poolId})`);
         try {
             // Call the staking provider's getPoolInfo method.
-            const poolInfo = await this.stakingProvider.getPoolInfo(
+            const poolInfo = await this.stakingProvider.getFormattedPoolInfo(
                 params.poolId,
             );
             return poolInfo;

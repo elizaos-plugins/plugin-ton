@@ -101,9 +101,9 @@ const buildStakeDetails = async (
 };
 
 export default {
-    name: "STAKE_TON",
+    name: "DEPOSIT_TON",
     similes: ["STAKE_TOKENS", "DEPOSIT_TON", "DEPOSIT_TOKEN"],
-    description: "Stake TON tokens in a specified pool. Make sure the message is not asking to unstake or withdraw.",
+    description: "Deposit TON tokens in a specified pool.",
     handler: async (
         runtime: IAgentRuntime,
         message: Memory,
@@ -111,11 +111,11 @@ export default {
         options: any,
         callback?: HandlerCallback,
     ) => {
-        elizaLogger.log("Starting STAKE_TON handler...");
+        elizaLogger.log("Starting DEPOSIT_TON handler...");
         const stakeDetails = await buildStakeDetails(runtime, message, state);
 
         if (!isStakeContent(stakeDetails)) {
-            elizaLogger.error("Invalid content for STAKE_TON action.");
+            elizaLogger.error("Invalid content for DEPOSIT_TON action.");
             if (callback) {
                 callback({
                     text: "Invalid staking details provided.",
@@ -166,21 +166,21 @@ export default {
             {
                 user: "{{user1}}",
                 content: {
-                    text: "Stake 1.5 TON in pool pool123",
-                    action: "STAKE_TON",
+                    text: "Deposit 1.5 TON in pool pool123",
+                    action: "DEPOSIT_TON",
                 },
             },
             {
                 user: "{{user2}}",
                 content: {
-                    text: "I'll stake 1.5 TON now...",
-                    action: "STAKE_TON",
+                    text: "I'll deposit 1.5 TON now...",
+                    action: "DEPOSIT_TON",
                 },
             },
             {
                 user: "{{user2}}",
                 content: {
-                    text: "Successfully staked 1.5 TON in pool pool123, Transaction: abcd1234efgh5678",
+                    text: "Successfully deposited 1.5 TON in pool pool123, Transaction: abcd1234efgh5678",
                 },
             },
         ],
