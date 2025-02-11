@@ -102,6 +102,15 @@ export async function uploadJSONToIPFS(json: any): Promise<string> {
   return response.IpfsHash;
 }
 
+export function formatCurrency(amount: string, digits: number): string {
+  try {
+      return parseFloat(amount).toFixed(digits).toString();
+  } catch (e) {
+      return "0";
+  }
+};
+
+
 export async function topUpBalance(  
     wallet,
     nftAmount: number,

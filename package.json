@@ -20,6 +20,7 @@
 	],
 	"dependencies": {
 		"@elizaos/core": "workspace:*",
+		"@evaafi/sdk": "latest",
 		"@ton/crypto": "3.3.0",
 		"@ton/ton": "15.1.0",
 		"bignumber.js": "9.1.2",
