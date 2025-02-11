@@ -115,6 +115,8 @@ export class TonWhalesStrategy implements StakingPlatform {
   ): Promise<bigint> {
     const memberData = await this.getMemberData(walletAddress, poolAddress);
 
+    if(memberData?.pending_withdraw) return memberData.balance - memberData.pending_withdraw;
+
     return memberData?.balance ?? BigInt("0");
   }
 
@@ -177,7 +179,7 @@ export class TonWhalesStrategy implements StakingPlatform {
       .storeUint(3665837821, 32)
       .storeUint(queryId, 64)
       .storeCoins(100000) // gas
-      .storeCoins(amount)
+      .storeCoins(toNano(amount))
       .endCell();
 
     const intMessage = internal({

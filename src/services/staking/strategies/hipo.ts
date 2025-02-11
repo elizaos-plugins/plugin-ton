@@ -105,15 +105,15 @@ export class HipoStrategy implements StakingPlatform {
     async getPoolInfo(poolAddress: Address): Promise<PoolInfo> {
         try {
             const result = await getTreasuryState(this.tonClient, poolAddress);
-
+            const rate = await getExchangeRate(this.tonClient, poolAddress);
             return {
                 address: poolAddress,
                 min_stake: BigInt(0),
                 deposit_fee: feeStake,
                 withdraw_fee: feeUnstake,
-                balance: result.totalCoins,
-                pending_deposits: result.totalStaking,
-                pending_withdraws: result.totalUnstaking
+                balance: calculateJettonsToTon(result.totalTokens, rate),
+                pending_deposits: calculateJettonsToTon(result.totalStaking, rate),
+                pending_withdraws: calculateJettonsToTon(result.totalUnstaking, rate),
             };
         } catch (error) {
             console.error("Error fetching Hipo pool info:", error);
