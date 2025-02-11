@@ -86,11 +86,15 @@ The `TonConnectWalletProvider` provide Ton Connect protocol to connect to any su
 You can use that connection in your code to make transactions or etc.
 
 ```typescript
+import { TonConnectWalletProvider } from "@elizaos/plugin-ton";
+
 const walletProvider  = new TonConnectWalletProvider(runtime);
 const wallet = walletProvider.getWalletClient();
 ```
 or
 ```typescript
+import { TonConnectWalletProvider } from "@elizaos/plugin-ton";
+
 const walletProvider  = new TonConnectWalletProvider(runtime);
 const wallet = walletProvider.getWalletClient(address);
 ```
