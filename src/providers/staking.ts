@@ -28,7 +28,8 @@ export interface TransactionResult {
 export interface IStakingProvider {
     stake(poolId: string, amount: number): Promise<string | null>;
     unstake(poolId: string, amount: number): Promise<string | null>;
-    getPoolInfo(poolId: string): Promise<any>;
+    getPoolInfo(poolId: string): Promise<PoolInfo>;
+    getFormattedPoolInfo(poolId: string): Promise<any>;
     getPortfolio(): Promise<string>;
 }
 
@@ -141,25 +142,29 @@ export class StakingProvider implements IStakingProvider {
         ].join('\n');
     }
     
-    async getPoolInfo(poolId: string): Promise<any> {
+    async getPoolInfo(poolId: string): Promise<PoolInfo> {
         const poolAddress = Address.parse(poolId);
 
         try {
             // Call a contract method that queries pool information.
             const strategy = PlatformFactory.getStrategy(poolAddress);
             const info = await strategy.getPoolInfo(poolAddress);
-            return this.formatPoolInfo(info);
+            return info;
         } catch (error: any) {
             console.error("Error fetching pool info:", error);
             throw error;
         }
     }
 
+    async getFormattedPoolInfo(poolId: string): Promise<any> {
+        return this.formatPoolInfo(await this.getPoolInfo(poolId));
+    }
+
     async getPortfolio(): Promise<string> {
         const walletAddress = Address.parse(this.walletProvider.getAddress());
     
         // Collect all staking positions
-        const stakingPositions: { poolAddress: string; amount: string }[] = [];
+        const stakingPositions: { poolAddress: string; amount: string, pending: string }[] = [];
         const stakingPoolAddresses = PlatformFactory.getAllAddresses();
     
         await Promise.all(
@@ -168,11 +173,14 @@ export class StakingProvider implements IStakingProvider {
                 if (!strategy) return;
     
                 const stakedTon = await strategy.getStakedTon(walletAddress, poolAddress);
-                if (!stakedTon) return;
+                const pendingWithdrawal = await strategy.getPendingWithdrawal(walletAddress, poolAddress);
+
+                if (!stakedTon && !pendingWithdrawal) return;
     
                 stakingPositions.push({
                     poolAddress: truncateTONAddress(poolAddress),
-                    amount: formatTON(stakedTon)
+                    amount: formatTON(stakedTon),
+                    pending: formatTON(pendingWithdrawal),
                 });
             })
         );
@@ -189,7 +197,7 @@ export class StakingProvider implements IStakingProvider {
     
         // Format the output
         const positions = stakingPositions
-            .map(pos => `Pool ${pos.poolAddress}: ${pos.amount} TON`)
+            .map(pos => `Pool ${pos.poolAddress}: Amount:${pos.amount} TON, Pending Withdrawal: ${pos.pending} TON`)
             .join('\n');
     
         return [
