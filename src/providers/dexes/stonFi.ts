@@ -1,4 +1,4 @@
-import { JettonMaster, toNano, TonClient } from "@ton/ton";
+import { JettonMaster, SenderArguments, toNano, TonClient } from "@ton/ton";
 import {
   JettonDeposit,
   DEX,
@@ -68,7 +68,7 @@ export class StonFi implements DEX {
         // Deposit both Jettons
         txParams = await Promise.all([
           jettonDeposits.map((jettonDeposit, index) => {
-            router.getProvideLiquidityJettonTxParams({
+            return router.getProvideLiquidityJettonTxParams({
               userWalletAddress: this.wallet.address,
               sendTokenAddress: jettonDeposit.jetton.address,
               sendAmount: toNano(jettonDeposit.amount),
@@ -86,7 +86,7 @@ export class StonFi implements DEX {
       );
       // Deposit both TON and Jetton
       if (tonAmount > 0 && jettonDeposits[0].amount > 0) {
-        const txParams = await Promise.all([
+        txParams = await Promise.all([
           // deposit 1 TON to the TON/TestRED pool and get at least 1 nano LP token
           router.getProvideLiquidityTonTxParams({
             userWalletAddress: this.wallet.address,
@@ -109,18 +109,17 @@ export class StonFi implements DEX {
       } else {
         if (tonAmount) {
           // Deposit only TON
-          const txParams =
-            await router.getSingleSideProvideLiquidityTonTxParams({
-              userWalletAddress: this.wallet.address,
-              proxyTon,
-              sendAmount: toNano(tonAmount),
-              otherTokenAddress: jettonDeposits[0].jetton.address,
-              minLpOut: "1",
-              queryId: 12345,
-            });
+          txParams = await router.getSingleSideProvideLiquidityTonTxParams({
+            userWalletAddress: this.wallet.address,
+            proxyTon,
+            sendAmount: toNano(tonAmount),
+            otherTokenAddress: jettonDeposits[0].jetton.address,
+            minLpOut: "1",
+            queryId: 12345,
+          });
         } else {
           // Deposit only Jetton
-          await router.getSingleSideProvideLiquidityTonTxParams({
+          txParams = await router.getSingleSideProvideLiquidityTonTxParams({
             userWalletAddress: this.wallet.address,
             proxyTon,
             sendAmount: toNano(jettonDeposits[0].amount),
@@ -131,22 +130,92 @@ export class StonFi implements DEX {
         }
       }
     }
+
+    if (txParams.length && txParams.length > 0) {
+      txParams.map(async (txParam) => {
+        await this.sendTransaction(txParam);
+      });
+    } else {
+      await this.sendTransaction(txParams);
+    }
+
+    return true;
   }
+
   async withdraw(
     jettonWithdrawals: JettonWithdrawal[],
     isTon: boolean,
     amount: number
-  ) {}
-  async claimFee() {
-    const vault = client.open(
-      await router.getVault({
-        tokenMinter: "kQDLvsZol3juZyOAVG8tWsJntOxeEZWEaWCbbSjYakQpuYN5", // TestRED
-        user: this.wallet.address, // ! replace with your address
+  ) {
+    const proxyTon = pTON.v2_1.create(
+      "kQACS30DNoUQ7NfApPvzh7eBmSZ9L4ygJ-lkNWtba8TQT-Px"
+    );
+    const assets: [string, string] = [
+      isTon
+        ? proxyTon.address.toString()
+        : jettonWithdrawals[0].jetton.address.toString(),
+      jettonWithdrawals[isTon ? 0 : 1].jetton.address.toString(),
+    ];
+    const pool = client.open(
+      await router.getPool({
+        token0: assets[0],
+        token1: assets[1],
       })
     );
 
-    const txParams = await vault.getWithdrawFeeTxParams({
+    const lpWallet = client.open(
+      await pool.getJettonWallet({
+        ownerAddress: this.wallet.address,
+      })
+    );
+
+    const lpWalletData = await lpWallet.getWalletData();
+
+    const txParams = await pool.getBurnTxParams({
+      amount: amount ?? lpWalletData.balance,
+      userWalletAddress: this.wallet.address,
       queryId: 12345,
     });
+
+    await this.sendTransaction(txParams);
+
+    return true;
   }
+
+  async claimFee(params: { jettons; isTon }) {
+    // Prepare tokens to claim fee from
+    const tokens = params.jettons.map((jetton) => jetton.address.toString());
+    if (params.isTon) {
+      tokens.push("kQDLvsZol3juZyOAVG8tWsJntOxeEZWEaWCbbSjYakQpuYN5");
+    }
+
+    // Create vaults
+    const vaults = await Promise.all(
+      tokens.map(async (token) => {
+        client.open(
+          await router.getVault({
+            tokenMinter: token,
+            user: this.wallet.address,
+          })
+        );
+      })
+    );
+
+    // Withdraw fees
+    const txParams = await Promise.all(
+      vaults.map(async (vault) => {
+        return await vault.getWithdrawFeeTxParams({
+          queryId: 12345,
+        });
+      })
+    );
+
+    await Promise.all(
+      txParams.map(async (txParam) => {
+        await this.sendTransaction(txParam);
+      })
+    );
+  }
+
+  private async sendTransaction(args: SenderArguments) {}
 }
