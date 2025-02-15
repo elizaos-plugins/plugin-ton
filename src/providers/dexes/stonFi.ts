@@ -1,4 +1,11 @@
-import { JettonMaster, SenderArguments, toNano, TonClient } from "@ton/ton";
+import {
+  internal,
+  JettonMaster,
+  SenderArguments,
+  toNano,
+  TonClient,
+  WalletContractV4,
+} from "@ton/ton";
 import {
   JettonDeposit,
   DEX,
@@ -7,6 +14,7 @@ import {
   SupportedMethod,
 } from "./dex";
 import { pTON, DEX as StonFiDEX } from "@ston-fi/sdk";
+import { mnemonicToPrivateKey } from "@ton/crypto";
 
 const client = new TonClient({
   endpoint: "https://testnet.toncenter.com/api/v2/jsonRPC",
@@ -31,7 +39,13 @@ export class StonFi implements DEX {
     this.wallet = wallet;
   }
 
-  async createPool(jettons: JettonMaster[]) {}
+  // To create a new Pool, just provide the minimum amount of liquidity to pair (1001 Jettons).
+  // A basic amount of 1001 lp tokens will be reserved on pool on initial liquidity deposit with the rest going to the user.
+  async createPool(jettons: JettonMaster[]) {
+    // Check if pool exists
+    // Check if total deposit ammounts > 1001
+    // Create pool
+  }
 
   // NOTE If jettonDeposits.length === 2 we deposit into a Jetton/Jetton pool
   // If jettonDeposits.length === 1 we deposit into a TON/Jetton pool
@@ -217,5 +231,27 @@ export class StonFi implements DEX {
     );
   }
 
-  private async sendTransaction(args: SenderArguments) {}
+  private async sendTransaction(txParams: SenderArguments) {
+    const dex = client.open(new StonFiDEX.v1.Router());
+    const mnemonics = Array.from(
+      { length: 24 },
+      (_, i) => `your mnemonic word ${i + 1}`
+    ); // replace with your mnemonic
+    const keyPair = await mnemonicToPrivateKey(mnemonics);
+
+    const workchain = 0;
+    const wallet = WalletContractV4.create({
+      workchain,
+      publicKey: keyPair.publicKey,
+    });
+
+    const contract = client.open(wallet);
+
+    // and send it manually later
+    await contract.sendTransfer({
+      seqno: await contract.getSeqno(),
+      secretKey: keyPair.secretKey,
+      messages: [internal(txParams)],
+    });
+  }
 }
