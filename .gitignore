@@ -1,15 +1,2 @@
-.turbo
 node_modules
-dist
-
-ton_wallet_backups/*
-ton_wallet_backups
-
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-
-pnpm-lock.yaml
+.turbo
