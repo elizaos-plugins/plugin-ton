@@ -34,13 +34,11 @@ const factory = tonClient.open(Factory.createFromAddress(MAINNET_FACTORY_ADDR));
 export class Dedust implements DEX {
   sender: Sender;
 
-  getSupportMethods() {
-    return [
-      SupportedMethod.CREATE_POOL,
-      SupportedMethod.DEPOSIT,
-      SupportedMethod.WITHDRAW,
-    ];
-  }
+  supportMethods = Object.freeze([
+    SupportedMethod.CREATE_POOL,
+    SupportedMethod.DEPOSIT,
+    SupportedMethod.WITHDRAW,
+  ]);
 
   async init(runtime: IAgentRuntime) {
     // TODO

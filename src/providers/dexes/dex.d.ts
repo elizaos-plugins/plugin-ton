@@ -13,20 +13,20 @@ export enum SupportedMethod {
 }
 
 export interface DEX {
-  getSupportMethods: () => SupportedMethod[];
+  supportMethods: readonly SupportedMethod[];
   createPool?: (jettons: JettonMaster[]) => {};
   // LP tokens should be issued
   deposit?: (
     jettonDeposits: JettonDeposit[],
     tonAmount: number,
-    params: {}
+    params?: {}
   ) => {};
   // LP tokens should be burned
   withdraw?: (
     jettonWithdrawals: JettonWithdrawal[],
     isTon: boolean,
     amount: number,
-    params: {}
+    params?: {}
   ) => {};
   claimFee?: (params: { isTon: boolean; jettons: JettonMaster[] }) => {};
 }
