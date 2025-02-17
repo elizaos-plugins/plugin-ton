@@ -5,12 +5,7 @@ export type Token = {
   name: string;
 };
 
-export enum SupportedMethod {
-  CREATE_POOL,
-  DEPOSIT,
-  WITHDRAW,
-  CLAIM_FEE,
-}
+
 
 export interface DEX {
   supportMethods: readonly SupportedMethod[];
