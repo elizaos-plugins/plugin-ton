@@ -11,6 +11,8 @@ This plugin provides functionality to:
 - Query wallet balances and portfolio information
 - Format and cache transaction data
 - Interface with TON blockchain via RPC endpoints
+- Query information for assets from Ston.fi DEX
+- Swap tokens using Ston.fi DEX
 
 ### Screenshot
 
@@ -43,9 +45,18 @@ npm install @elizaos/plugin-ton
 The plugin requires the following environment variables:
 
 ```env
-TON_PRIVATE_KEY=your_mnemonic_phrase  # Required - wallet mnemonic words
-TON_RPC_URL=your_rpc_endpoint  # Optional - defaults to mainnet RPC
-TON_RPC_API_KEY=
+# Ton
+TON_PRIVATE_KEY= # Ton Mnemonic Seed Phrase Join With " "(single space) String
+TON_RPC_URL=     # ton rpc - Defaults to https://toncenter.com/api/v2/jsonRPC
+TON_RPC_API_KEY= # ton rpc api key
+
+# STON.fi - Values are not required, they allow using newer versions of STON.fi DEX
+# Identifies mainnet / testnet from TON_RPC_URL
+STON_API_BASE_URL= # By default, uses null value (i.e. standard STON value)
+STON_ROUTER_VERSION= # By default, uses v1 for mainnet and v2_1 for testnet
+STON_ROUTER_ADDRESS= # By default, uses standard values
+STON_PROXY_VERSION= # By default, uses v1 for mainnet and v2_1 for testnet
+STON_PROXY_ADDRESS= # By default, uses standard values
 ```
 
 ## Usage
@@ -56,8 +67,8 @@ Import and register the plugin in your Eliza configuration:
 import { tonPlugin } from "@elizaos/plugin-ton";
 
 export default {
-    plugins: [tonPlugin],
-    // ... other configuration
+  plugins: [tonPlugin],
+  // ... other configuration
 };
 ```
 
@@ -92,34 +103,36 @@ const action = new TransferAction(walletProvider);
 
 // Execute transfer
 const hash = await action.transfer({
-    recipient: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
-    amount: "1.5",
+  recipient: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
+  amount: "1.5",
 });
 ```
 
 ### BatchTransferAction
+
 The `BatchTransferAction` handles transfers of NFTs, Jettons and TON in a single transaction:
 ![batch-transfer-image](images/Screenshot-batch-transfer.png)
+
 ```typescript
 import { BatchTransferTokens } from "@elizaos/plugin-ton";
 
 // Initialize transfer action
 const action = new BatchTransferTokens(walletProvider);
 const batchTransfers = {
-    transfers: [
-        {
-            type: "ton",
-            recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
-            amount: "0.1"
-        },
-        {
-            type: "token",
-            recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
-            tokenInd: "0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5",
-            amount: "1"
-        }
-    ]
-}
+  transfers: [
+    {
+      type: "ton",
+      recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
+      amount: "0.1",
+    },
+    {
+      type: "token",
+      recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
+      tokenInd: "0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5",
+      amount: "1",
+    },
+  ],
+};
 const reports = await batchTransferAction.createBatchTransfer(batchTransfers);
 ```
 
@@ -135,8 +148,8 @@ const action = new CreateTonWallet(runtime);
 
 // Execute transfer
 const { walletAddress, mnemonic } = await action.createNewWallet({
-    rpcUrl: "https://toncenter.com/api/v2/jsonRPC",
-    encryptionPassword: "GAcAWFv6ZXuaJOuSqemxku4",
+  rpcUrl: "https://toncenter.com/api/v2/jsonRPC",
+  encryptionPassword: "GAcAWFv6ZXuaJOuSqemxku4",
 });
 ```
 
@@ -156,6 +169,8 @@ npm run test
 
 ## Dependencies
 
+- `@ston-fi/api`: API for STON.fi DEX
+- `@ston-fi/sdk`: SDK for STON.fi DEX
 - `@ton/ton`: Core TON blockchain functionality
 - `@ton/crypto`: Cryptographic operations
 - `bignumber.js`: Precise number handling
@@ -173,17 +188,17 @@ npm run test
 
 ```typescript
 interface TransferContent {
-    recipient: string;
-    amount: string | number;
+  recipient: string;
+  amount: string | number;
 }
 
 interface WalletPortfolio {
-    totalUsd: string;
-    totalNativeToken: string;
+  totalUsd: string;
+  totalNativeToken: string;
 }
 
 interface Prices {
-    nativeToken: { usd: string };
+  nativeToken: { usd: string };
 }
 ```
 
@@ -191,12 +206,12 @@ interface Prices {
 
 ```typescript
 const PROVIDER_CONFIG = {
-    MAINNET_RPC: "https://toncenter.com/api/v2/jsonRPC",
-    STONFI_TON_USD_POOL: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
-    CHAIN_NAME_IN_DEXSCREENER: "ton",
-    MAX_RETRIES: 3,
-    RETRY_DELAY: 2000,
-    TON_DECIMAL: BigInt(1000000000),
+  MAINNET_RPC: "https://toncenter.com/api/v2/jsonRPC",
+  STONFI_TON_USD_POOL: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
+  CHAIN_NAME_IN_DEXSCREENER: "ton",
+  MAX_RETRIES: 3,
+  RETRY_DELAY: 2000,
+  TON_DECIMAL: BigInt(1000000000),
 };
 ```
 
@@ -223,56 +238,56 @@ const PROVIDER_CONFIG = {
 
 1. **Wallet Management**
 
-    - Multi-wallet support
-    - Hardware wallet integration
-    - Advanced key management
-    - Batch transaction processing
-    - Custom wallet contracts
-    - Recovery mechanisms
+   - Multi-wallet support
+   - Hardware wallet integration
+   - Advanced key management
+   - Batch transaction processing
+   - Custom wallet contracts
+   - Recovery mechanisms
 
 2. **Smart Contract Integration**
 
-    - Contract deployment tools
-    - FunC contract templates
-    - Testing framework
-    - Upgrade management
-    - Gas optimization
-    - Security analysis
+   - Contract deployment tools
+   - FunC contract templates
+   - Testing framework
+   - Upgrade management
+   - Gas optimization
+   - Security analysis
 
 3. **Token Operations**
 
-    - Jetton creation tools
-    - NFT support enhancement
-    - Token metadata handling
-    - Collection management
-    - Batch transfers
-    - Token standards
+   - Jetton creation tools
+   - NFT support enhancement
+   - Token metadata handling
+   - Collection management
+   - Batch transfers
+   - Token standards
 
 4. **DeFi Features**
 
-    - DEX integration
-    - Liquidity management
-    - Yield farming tools
-    - Price feed integration
-    - Swap optimization
-    - Portfolio tracking
+   - DEX integration
+   - Liquidity management
+   - Yield farming tools
+   - Price feed integration
+   - Swap optimization
+   - Portfolio tracking
 
 5. **Developer Tools**
 
-    - Enhanced debugging
-    - CLI improvements
-    - Documentation generator
-    - Integration templates
-    - Performance monitoring
-    - Testing utilities
+   - Enhanced debugging
+   - CLI improvements
+   - Documentation generator
+   - Integration templates
+   - Performance monitoring
+   - Testing utilities
 
 6. **Network Features**
-    - Workchain support
-    - Sharding optimization
-    - RPC management
-    - Network monitoring
-    - Archive node integration
-    - Custom endpoints
+   - Workchain support
+   - Sharding optimization
+   - RPC management
+   - Network monitoring
+   - Archive node integration
+   - Custom endpoints
 
 We welcome community feedback and contributions to help prioritize these enhancements.
 
@@ -284,6 +299,7 @@ Contributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) fil
 
 This plugin integrates with and builds upon several key technologies:
 
+- [STON.fi](https://ston.fi/): STON.fi DEX
 - [TON Blockchain](https://ton.org/): The Open Network blockchain platform
 - [@ton/ton](https://www.npmjs.com/package/@ton/ton): Core TON blockchain functionality
 - [@ton/crypto](https://www.npmjs.com/package/@ton/crypto): Cryptographic operations
@@ -295,6 +311,7 @@ Special thanks to:
 - The TON Foundation for developing and maintaining the TON blockchain
 - The TON Developer community
 - The TON SDK maintainers
+- The STON.fi SDK maintainers
 - The Eliza community for their contributions and feedback
 
 For more information about TON blockchain capabilities:
