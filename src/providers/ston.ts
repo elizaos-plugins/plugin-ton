@@ -79,16 +79,16 @@ export class StonProvider {
 
     async getAsset(symbol: string, condition: string = `${AssetTag.DefaultSymbol}`) {
         if (this.NETWORK === "mainnet") {
-            return this.getAssetMainnet(symbol, condition);
+            return await this.getAssetMainnet(symbol, condition);
         } else {
-            return this.getAssetTestnet(symbol);
+            return await this.getAssetTestnet(symbol);
         }
     }
     async getAssets(from: string, to: string, condition: string = `${AssetTag.DefaultSymbol}`) {
         if (this.NETWORK === "mainnet") {
-            return this.getAssetsMainnet(from, to, condition);
+            return await this.getAssetsMainnet(from, to, condition);
         } else {
-            return this.getAssetsTestnet(from, to);
+            return await this.getAssetsTestnet(from, to);
         }
     }
 
@@ -144,8 +144,8 @@ export class StonProvider {
 
 
     async getAssetsTestnet(from: string, to: string) {
-        const inAsset = this.getAssetTestnet(from);
-        const outAsset = this.getAssetTestnet(to);
+        const inAsset = await this.getAssetTestnet(from);
+        const outAsset = await this.getAssetTestnet(to);
 
         return [inAsset, outAsset];
     }
