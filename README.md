@@ -97,6 +97,49 @@ const hash = await action.transfer({
 });
 ```
 
+### BatchTransferAction
+The `BatchTransferAction` handles transfers of NFTs, Jettons and TON in a single transaction:
+![batch-transfer-image](images/Screenshot-batch-transfer.png)
+```typescript
+import { BatchTransferTokens } from "@elizaos/plugin-ton";
+
+// Initialize transfer action
+const action = new BatchTransferTokens(walletProvider);
+const batchTransfers = {
+    transfers: [
+        {
+            type: "ton",
+            recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
+            amount: "0.1"
+        },
+        {
+            type: "token",
+            recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
+            tokenInd: "0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5",
+            amount: "1"
+        }
+    ]
+}
+const reports = await batchTransferAction.createBatchTransfer(batchTransfers);
+```
+
+### Create Ton Wallet Action
+
+The `CreateTonWallet` action handles on-demand wallet creation with encrypted key storage from user-supplied encryption key:
+
+```typescript
+import { CreateTonWallet } from "@elizaos/plugin-ton";
+
+// Initialize transfer action
+const action = new CreateTonWallet(runtime);
+
+// Execute transfer
+const { walletAddress, mnemonic } = await action.createNewWallet({
+    rpcUrl: "https://toncenter.com/api/v2/jsonRPC",
+    encryptionPassword: "GAcAWFv6ZXuaJOuSqemxku4",
+});
+```
+
 ### Auction Interaction Action
 The `AuctionInteractionTon` action handles Auction interactions
 ![auction-data](screenshit/auction-data.png)
