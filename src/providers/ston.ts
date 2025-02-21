@@ -6,7 +6,7 @@ import { AssetTag, StonApiClient } from '@ston-fi/api';
 import { TonClient } from "@ton/ton";
 
 import { DEX, pTON } from "@ston-fi/sdk";
-import { testnetAssets } from "../utils/testnetStonAssets.ts";
+import { testnetAssets } from "../utils/testnetStonAssets";
 
 const PROVIDER_CONFIG = {
     SWAP_WAITING_TIME: 1000, // [ms]

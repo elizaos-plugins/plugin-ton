@@ -13,7 +13,7 @@ import {
     generateText,
 } from "@elizaos/core";
 import { z } from "zod";
-import { sleep } from "../util.ts";
+import { sleep } from "../utils/util";
 import {
     initWalletProvider,
     nativeWalletProvider,
@@ -23,8 +23,8 @@ import {
 import { OpenedContract, toNano, TransactionDescriptionGeneric, fromNano } from "@ton/ton";
 import { AssetTag } from '@ston-fi/api';
 
-import { validateEnvConfig } from "../enviroment.ts";
-import { StonAsset, initStonProvider, StonProvider } from "../providers/ston.ts";
+import { validateEnvConfig } from "../enviroment";
+import { StonAsset, initStonProvider, StonProvider } from "../providers/ston";
 
 
 

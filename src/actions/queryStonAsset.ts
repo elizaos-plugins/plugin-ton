@@ -15,11 +15,11 @@ import {
 import { z } from "zod";
 import {
     nativeWalletProvider,
-} from "../providers/wallet.ts";
+} from "../providers/wallet";
 
 
-import { validateEnvConfig } from "../enviroment.ts";
-import { initStonProvider } from "../providers/ston.ts";
+import { validateEnvConfig } from "../enviroment";
+import { initStonProvider } from "../providers/ston";
 
 
 
