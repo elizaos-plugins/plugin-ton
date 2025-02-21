@@ -8,7 +8,7 @@ import getPoolInfoAction from "./actions/getPoolInfo.ts";
 import { WalletProvider, nativeWalletProvider } from "./providers/wallet.ts";
 import { StakingProvider, nativeStakingProvider } from "./providers/staking.ts";
 
-export { WalletProvider, transferAction as TransferTonToken, createWalletAction as CreateTonWallet, loadWalletAction as LoadTonWallet, batchTransferAction as BatchTransferTokens };
+export { WalletProvider, transferAction as TransferTonToken, createWalletAction as CreateTonWallet, loadWalletAction as LoadTonWallet };
 export { StakingProvider, stakeAction as StakeTonToken, unstakeAction as UnstakeTonToken, getPoolInfoAction as GetPoolInfoTonToken  };
 
 export const tonPlugin: Plugin = {
