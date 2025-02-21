@@ -125,7 +125,7 @@ const buildUpdateDetails = async (
   const content = await generateObject({
     runtime,
     context: updateContext,
-    schema: updateNFTMetadataSchema as any,
+    schema: updateNFTMetadataSchema,
     modelClass: ModelClass.SMALL,
   });
 
