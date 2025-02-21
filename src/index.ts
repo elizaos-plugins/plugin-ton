@@ -5,7 +5,7 @@ import loadWalletAction from "./actions/loadWallet.ts";
 import auctionAction from "./actions/auctionInteraction.ts";
 import { WalletProvider, nativeWalletProvider } from "./providers/wallet.ts";
 
-export { WalletProvider, transferAction as TransferTonToken, createWalletAction as CreateTonWallet, loadWalletAction as LoadTonWallet, batchTransferAction as BatchTransferTokens };
+export { WalletProvider, transferAction as TransferTonToken, createWalletAction as CreateTonWallet, loadWalletAction as LoadTonWallet};
 export { auctionAction as AuctionInteractionActionTon };
 
 export const tonPlugin: Plugin = {
