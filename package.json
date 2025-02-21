@@ -20,6 +20,7 @@
     ],
     "dependencies": {
         "@ton/crypto": "3.3.0",
+        "@evaafi/sdk": "latest",
         "@ton/ton": "15.1.0",
         "bignumber.js": "9.1.2",
         "node-cache": "5.1.2",
