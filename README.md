@@ -11,12 +11,21 @@ This plugin provides functionality to:
 - Query wallet balances and portfolio information
 - Format and cache transaction data
 - Interface with TON blockchain via RPC endpoints
+- Connect TON wallets using TonConnect protocol
+- Execute secure token transfers
+- Query wallet connection status
+- Support multiple wallet applications (like Tonkeeper)
+- Support QR Code scanning connection
 - Query information for assets from Ston.fi DEX
 - Swap tokens using Ston.fi DEX
 
 ### Screenshot
 
 ![alt text](./screenshot/transfer.png "Transfer TON")
+
+![alt text](./screenshot/connect.png "Connect with TonConnect QR Code")
+![alt text](./screenshot/status.png "TonConnect Status")
+![alt text](./screenshot/disconnect.png "Disconnect")
 
 ### Quick Start
 
@@ -49,6 +58,8 @@ The plugin requires the following environment variables:
 TON_PRIVATE_KEY= # Ton Mnemonic Seed Phrase Join With " "(single space) String
 TON_RPC_URL=     # ton rpc - Defaults to https://toncenter.com/api/v2/jsonRPC
 TON_RPC_API_KEY= # ton rpc api key
+TON_MANIFEST_URL=your_manifest_url  # Required - TonConnect manifest URL
+TON_BRIDGE_URL=your_bridge_url  # Optional - defaults to https://bridge.tonapi.io/bridge
 
 # STON.fi - Values are not required, they allow using newer versions of STON.fi DEX
 # Identifies mainnet / testnet from TON_RPC_URL
@@ -89,6 +100,26 @@ const balance = await provider.getWalletBalance();
 
 // Get formatted portfolio
 const portfolio = await provider.getFormattedPortfolio(runtime);
+```
+
+### TonConnectProvider
+
+The `TonConnectProvider` manages wallet connection operations:
+
+```typescript
+import { TonConnectProvider } from "@elizaos/plugin-ton-connect";
+
+// Initialize provider
+const provider = await initTonConnectProvider(runtime);
+
+// Connect wallet
+const universalLink = await provider.connect();
+
+// Check connection status
+const isConnected = provider.isConnected();
+
+// Disconnect
+await provider.disconnect();
 ```
 
 ### TransferAction

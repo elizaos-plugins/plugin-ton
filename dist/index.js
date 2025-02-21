@@ -28517,12 +28517,16 @@ import BigNumber from "bignumber.js";
 var CONFIG_KEYS = {
   TON_PRIVATE_KEY: "TON_PRIVATE_KEY",
   TON_RPC_URL: "TON_RPC_URL",
-  TON_RPC_API_KEY: "TON_RPC_API_KEY"
+  TON_RPC_API_KEY: "TON_RPC_API_KEY",
+  TON_MANIFEST_URL: "TON_MANIFEST_URL",
+  TON_BRIDGE_URL: "TON_BRIDGE_URL"
 };
 var envSchema = z.object({
   TON_PRIVATE_KEY: z.string().min(1, "Ton private key is required"),
   TON_RPC_URL: z.string(),
-  TON_RPC_API_KEY: z.string()
+  TON_RPC_API_KEY: z.string(),
+  TON_MANIFEST_URL: z.string(),
+  TON_BRIDGE_URL: z.string()
 });
 
 // src/providers/wallet.ts
@@ -29001,13 +29005,852 @@ var transfer_default = {
   ]
 };
 
+// src/actions/tonConnectTransaction.ts
+import {
+  elizaLogger as elizaLogger2,
+  composeContext as composeContext2,
+  ModelClass as ModelClass2,
+  generateObject as generateObject2
+} from "@elizaos/core";
+
+// src/providers/tonConnect.ts
+import {
+  TonConnect,
+  isWalletInfoRemote,
+  UserRejectsError
+} from "@tonconnect/sdk";
+import NodeCache2 from "node-cache";
+var PROVIDER_CONFIG2 = {
+  BRIDGE_URL: "https://bridge.tonapi.io/bridge",
+  MAX_RETRIES: 3,
+  RETRY_DELAY: 2e3,
+  CACHE_TTL: {
+    DEFAULT_FILE_CACHE: 86400,
+    // 24 hours
+    DEFAULT_MEMORY_CACHE: 3600,
+    // 1 hour
+    CONNECTION: 86400
+    // 24 hours
+  }
+};
+var CACHE_KEYS = {
+  CACHE_KEY: "ton/connect",
+  CURRENT_WALLET: "currentWallet",
+  CONNECTOR: "connector"
+};
+var CacheManager = class {
+  constructor(memoryCache, fileCache, baseCacheKey, defaultTTL) {
+    this.memoryCache = memoryCache;
+    this.fileCache = fileCache;
+    this.baseCacheKey = baseCacheKey;
+    this.defaultTTL = defaultTTL;
+  }
+  async get(key) {
+    const cacheKey = `${this.baseCacheKey}/${key}`;
+    const memoryCached = this.memoryCache.get(cacheKey);
+    if (memoryCached) return memoryCached;
+    const fileCached = await this.fileCache.get(cacheKey);
+    if (fileCached) {
+      this.memoryCache.set(cacheKey, fileCached);
+      return fileCached;
+    }
+    return null;
+  }
+  async set(key, data, ttl) {
+    const cacheKey = `${this.baseCacheKey}/${key}`;
+    const expiresIn = ttl || this.defaultTTL;
+    this.memoryCache.set(cacheKey, data, expiresIn);
+    await this.fileCache.set(cacheKey, data, {
+      expires: Date.now() + expiresIn * 1e3
+    });
+  }
+  async delete(key) {
+    const cacheKey = `${this.baseCacheKey}/${key}`;
+    this.memoryCache.del(cacheKey);
+    await this.fileCache.delete(cacheKey);
+  }
+  async clear() {
+    this.memoryCache.flushAll();
+    await this.fileCache.delete(`${this.baseCacheKey}/*`);
+  }
+};
+var TonConnectStorage = class {
+  constructor(cacheManager) {
+    this.cacheManager = cacheManager;
+  }
+  async setItem(key, value) {
+    await this.cacheManager.set(key, value, {
+      expires: Date.now() + PROVIDER_CONFIG2.CACHE_TTL.CONNECTION * 1e3
+    });
+  }
+  async getItem(key) {
+    return await this.cacheManager.get(key);
+  }
+  async removeItem(key) {
+    await this.cacheManager.delete(key);
+  }
+};
+var TonConnectProvider = class _TonConnectProvider {
+  static instance = null;
+  connector;
+  cacheManager;
+  unsubscribe = null;
+  bridgeUrl;
+  manifestUrl;
+  initialized = false;
+  connected = false;
+  constructor() {
+    this.cacheManager = {};
+    this.connector = {};
+  }
+  static getInstance() {
+    if (!_TonConnectProvider.instance) {
+      _TonConnectProvider.instance = new _TonConnectProvider();
+    }
+    return _TonConnectProvider.instance;
+  }
+  async initialize(manifestUrl, bridgeUrl, fileCache) {
+    if (this.initialized) return;
+    this.validateManifestUrl(manifestUrl);
+    this.validateBridgeUrl(bridgeUrl);
+    const memoryCache = new NodeCache2({
+      stdTTL: PROVIDER_CONFIG2.CACHE_TTL.DEFAULT_MEMORY_CACHE,
+      checkperiod: 60
+    });
+    this.cacheManager = new CacheManager(
+      memoryCache,
+      fileCache,
+      CACHE_KEYS.CACHE_KEY,
+      PROVIDER_CONFIG2.CACHE_TTL.DEFAULT_FILE_CACHE
+    );
+    await this.initializeConnection(manifestUrl, fileCache);
+    this.initialized = true;
+    this.bridgeUrl = bridgeUrl;
+  }
+  validateManifestUrl(url) {
+    if (!url || !url.startsWith("http")) {
+      throw new Error("Invalid manifest URL provided");
+    }
+  }
+  validateBridgeUrl(url) {
+    if (!url || !url.startsWith("http")) {
+      throw new Error("Invalid bridge URL provided");
+    }
+  }
+  async initializeConnection(manifestUrl, fileCache) {
+    try {
+      const storage = new TonConnectStorage(fileCache);
+      this.connector = new TonConnect({ manifestUrl, storage });
+      this.setupEventListeners();
+    } catch (error) {
+      console.error("Failed to initialize connection:", error);
+    }
+  }
+  setupEventListeners() {
+    this.unsubscribe = null;
+    this.unsubscribe = this.connector.onStatusChange((wallet) => {
+      if (wallet) {
+        this.connected = true;
+        this.setCachedData(CACHE_KEYS.CURRENT_WALLET, wallet);
+      } else {
+        this.connected = false;
+        this.deleteCachedData(CACHE_KEYS.CURRENT_WALLET);
+      }
+    });
+  }
+  async fetchWithRetry(operation, retries = PROVIDER_CONFIG2.MAX_RETRIES) {
+    for (let i = 0; i < retries; i++) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (i === retries - 1) throw error;
+        const delay = PROVIDER_CONFIG2.RETRY_DELAY * Math.pow(2, i);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+    throw new Error("Operation failed after max retries");
+  }
+  async getWalletInfoList() {
+    const walletsList = await this.fetchWithRetry(
+      () => this.connector.getWallets()
+    );
+    return walletsList;
+  }
+  async connect(walletName) {
+    try {
+      const walletsList = await this.fetchWithRetry(
+        () => this.connector.getWallets()
+      );
+      const remoteWallets = walletsList.filter(
+        isWalletInfoRemote
+      );
+      if (remoteWallets.length === 0) {
+        throw new Error("No remote wallets available");
+      }
+      const walletUniversalLink = walletName ? remoteWallets.find((wallet) => wallet.name === walletName)?.universalLink : null;
+      const walletConnectionSource = {
+        universalLink: walletUniversalLink,
+        bridgeUrl: this.bridgeUrl
+      };
+      const universalLink = this.connector.connect(
+        walletConnectionSource
+      );
+      return universalLink;
+    } catch (error) {
+      this.handleError("Connection error", error);
+      return null;
+    }
+  }
+  async getCachedData(key) {
+    return await this.cacheManager.get(key);
+  }
+  async setCachedData(key, data, ttl) {
+    await this.cacheManager.set(key, data, ttl);
+  }
+  async deleteCachedData(key) {
+    await this.cacheManager.delete(key);
+  }
+  async clearCache() {
+    await this.cacheManager.clear();
+  }
+  handleError(context, error) {
+    if (error instanceof UserRejectsError) {
+      console.warn(`${context}: User rejected the operation`);
+    } else {
+      console.error(`${context}:`, error);
+    }
+  }
+  async disconnect() {
+    try {
+      if (this.connector.connected) {
+        await this.connector.disconnect();
+      }
+      if (this.unsubscribe) {
+        this.unsubscribe();
+        this.unsubscribe = null;
+      }
+      await this.clearCache();
+    } catch (error) {
+      this.handleError("Disconnection error", error);
+    }
+  }
+  async formatConnectionStatus(runtime) {
+    const wallet = await this.getCachedData(
+      CACHE_KEYS.CURRENT_WALLET
+    );
+    if (!this.isConnected() || !wallet) {
+      return {
+        status: "Disconnected",
+        walletInfo: null
+      };
+    }
+    return {
+      status: "Connected",
+      walletInfo: wallet
+    };
+  }
+  async sendTransaction(transaction) {
+    if (!this.connector.connected) {
+      throw new Error("Wallet not connected");
+    }
+    return await this.fetchWithRetry(async () => {
+      try {
+        return await this.connector.sendTransaction(transaction);
+      } catch (error) {
+        if (error instanceof UserRejectsError) {
+          throw new Error("Transaction rejected by user");
+        }
+        throw error;
+      }
+    });
+  }
+  isConnected = () => this.connected;
+  getWalletInfo = () => this.connector.wallet;
+};
+var initTonConnectProvider = async (runtime) => {
+  const manifestUrl = runtime.getSetting(CONFIG_KEYS.TON_MANIFEST_URL) ?? null;
+  if (!manifestUrl) {
+    throw new Error("TON_MANIFEST_URL is not set");
+  }
+  const bridgeUrl = runtime.getSetting(CONFIG_KEYS.TON_BRIDGE_URL) ?? PROVIDER_CONFIG2.BRIDGE_URL;
+  const provider = TonConnectProvider.getInstance();
+  await provider.initialize(manifestUrl, bridgeUrl, runtime.cacheManager);
+  return provider;
+};
+var tonConnectProvider = {
+  async get(runtime, message, state) {
+    try {
+      const provider = await initTonConnectProvider(runtime);
+      return provider.formatConnectionStatus(runtime);
+    } catch (error) {
+      console.error("TON Connect provider error:", error);
+      return "Unable to connect to TON wallet. Please try again later.";
+    }
+  }
+};
+
+// src/actions/tonConnectTransaction.ts
+import {
+  UserRejectsError as UserRejectsError2
+} from "@tonconnect/sdk";
+function isTonConnectSendTransactionContent(content) {
+  console.log("Content for TonConnect transaction", content);
+  if (!content.messages || !Array.isArray(content.messages)) {
+    return false;
+  }
+  return content.messages.every(
+    (message) => typeof message.address === "string" && typeof message.amount === "string"
+  );
+}
+var tonConnectSendTransactionTemplate = `Respond with a JSON markdown block containing only the extracted values. Use null for any values that cannot be determined.
+
+Example response:
+\`\`\`json
+{
+    "validUntil": 1234567890,
+    "network": "MAINNET",
+    "from": "0:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+    "messages": [
+        {
+            "address": "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
+            "amount": "1000000000",
+            "stateInit": "te6cckEBAQEAAgAAAEysuc0=",
+            "payload": "te6cckEBAQEAAgAAAEysuc0="
+        },
+        {
+            "address": "EQDmnxDMhId6v1Ofg_h5KR5coWlFG6e86Ro3pc7Tq4CA0-Jn",
+            "amount": "2000000000",
+            "stateInit": null,
+            "payload": null
+        }
+    ]
+}
+\`\`\`
+
+{{recentMessages}}
+
+Given the recent messages, extract the following information about the requested transaction:
+- List of messages with recipient addresses and amounts
+- Convert all amounts to nanotons (1 TON = 1,000,000,000 nanotons)
+- Optional stateInit (base64 encoded contract code)
+- Optional payload (base64 encoded message body)
+- Optional network specification (MAINNET or TESTNET)
+- Optional from address
+- Optional validUntil timestamp (in unix seconds)
+
+Respond with a JSON markdown block containing only the extracted values.`;
+var TonConnectSendTransactionAction = class {
+  async sendTransaction(params, provider) {
+    console.log(`Sending transaction via TonConnect`);
+    if (!provider.isConnected()) {
+      throw new Error("Please connect wallet to send the transaction!");
+    }
+    const transaction = {
+      validUntil: params.validUntil || Math.floor(Date.now() / 1e3) + 60,
+      network: params.network,
+      from: params.from,
+      messages: params.messages
+    };
+    try {
+      const result = await provider.sendTransaction(transaction);
+      console.log("Transaction sent successfully");
+      return result.boc;
+    } catch (error) {
+      if (error instanceof UserRejectsError2) {
+        throw new Error(
+          "You rejected the transaction. Please confirm it to send to the blockchain"
+        );
+      }
+      throw new Error(`Unknown error happened: ${error.message}`);
+    }
+  }
+};
+var buildTonConnectSendTransactionDetails = async (runtime, message, state) => {
+  let currentState = state;
+  if (!currentState) {
+    currentState = await runtime.composeState(message);
+  } else {
+    currentState = await runtime.updateRecentMessageState(currentState);
+  }
+  const transactionSchema = z.object({
+    validUntil: z.number().optional(),
+    network: z.enum(["MAINNET", "TESTNET"]).optional(),
+    from: z.string().optional(),
+    messages: z.array(
+      z.object({
+        address: z.string(),
+        amount: z.string(),
+        stateInit: z.string().optional(),
+        payload: z.string().optional()
+      })
+    )
+  });
+  const transactionContext = composeContext2({
+    state,
+    template: tonConnectSendTransactionTemplate
+  });
+  const content = await generateObject2({
+    runtime,
+    context: transactionContext,
+    schema: transactionSchema,
+    modelClass: ModelClass2.SMALL
+  });
+  return content.object;
+};
+var tonConnectTransaction_default = {
+  name: "SEND_TRANSACTION_TONCONNECT",
+  similes: ["SEND_TX_TONCONNECT", "SEND_TRANSACTION_TC"],
+  description: "Send any transaction using TonConnect wallet integration.",
+  handler: async (runtime, message, state, _options, callback) => {
+    elizaLogger2.log("Starting SEND_TRANSACTION_TONCONNECT handler...");
+    try {
+      const provider = await initTonConnectProvider(runtime);
+      if (!provider.isConnected()) {
+        if (callback) {
+          callback({
+            text: "Please connect your wallet first using the TON_CONNECT action.",
+            content: { error: "Wallet not connected" }
+          });
+        }
+        return false;
+      }
+      const transactionDetails = await buildTonConnectSendTransactionDetails(
+        runtime,
+        message,
+        state
+      );
+      if (!isTonConnectSendTransactionContent(transactionDetails)) {
+        console.error(
+          "Invalid content for SEND_TRANSACTION_TONCONNECT action."
+        );
+        if (callback) {
+          callback({
+            text: "Unable to process transaction request. Invalid content provided.",
+            content: { error: "Invalid transaction content" }
+          });
+        }
+        return false;
+      }
+      const action = new TonConnectSendTransactionAction();
+      const boc = await action.sendTransaction(
+        transactionDetails,
+        provider
+      );
+      if (callback) {
+        callback({
+          text: `Successfully sent transaction. Transaction: ${boc}`,
+          content: {
+            success: true,
+            boc,
+            transaction: transactionDetails
+          }
+        });
+      }
+      return true;
+    } catch (error) {
+      console.error("Error during transaction:", error);
+      if (callback) {
+        callback({
+          text: `Error sending transaction: ${error.message}`,
+          content: { error: error.message }
+        });
+      }
+      return false;
+    }
+  },
+  template: tonConnectSendTransactionTemplate,
+  validate: async (_runtime) => {
+    return true;
+  },
+  examples: [
+    [
+      {
+        user: "{{user1}}",
+        content: {
+          text: "Send 1 TON to EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4 with payload te6cckEBAQEAAgAAAEysuc0=",
+          action: "SEND_TRANSACTION_TONCONNECT"
+        }
+      },
+      {
+        user: "{{user2}}",
+        content: {
+          text: "Processing transaction via TonConnect...",
+          action: "SEND_TRANSACTION_TONCONNECT"
+        }
+      },
+      {
+        user: "{{user2}}",
+        content: {
+          text: "Successfully sent transaction. Transaction: c8ee4a2c1bd070005e6cd31b32270aa461c69b927c3f4c28b293c80786f78b43"
+        }
+      }
+    ]
+  ]
+};
+
+// src/actions/tonConnect.ts
+import {
+  elizaLogger as elizaLogger3,
+  GoalStatus
+} from "@elizaos/core";
+import QRCode from "qrcode";
+import { toUserFriendlyAddress } from "@tonconnect/sdk";
+var connectAction = {
+  name: "TON_CONNECT",
+  similes: [
+    "TON_CONNECT",
+    "USE_TON_CONNECT",
+    "CONNECT_TON_WALLET",
+    "TON_CONNECT_WALLET"
+  ],
+  description: "connect to ton wallet with tonconnect",
+  validate: async (runtime, message) => {
+    const existingGoals = await runtime.databaseAdapter.getGoals({
+      agentId: runtime.agentId,
+      roomId: message.roomId,
+      userId: message.userId,
+      onlyInProgress: true
+    });
+    const tonConnectGoal = existingGoals.find(
+      (g) => g.name === "TON_CONNECT_WALLET"
+    );
+    if (tonConnectGoal) {
+      return ["FAILED", "COMPLETED"].includes(tonConnectGoal.status);
+    }
+    const tonConnectProvider2 = await initTonConnectProvider(runtime);
+    return !!tonConnectProvider2;
+  },
+  handler: async (runtime, message, state, _options, callback) => {
+    if (!state) {
+      state = await runtime.composeState(message);
+    } else {
+      state = await runtime.updateRecentMessageState(state);
+    }
+    elizaLogger3.log("Starting TON_CONNECT handler...");
+    const connectorStatus = await tonConnectProvider.get(
+      runtime,
+      message,
+      state
+    );
+    if (!connectorStatus) {
+      callback?.({
+        text: "Error connecting to TON wallet. Please try again later."
+      });
+      return true;
+    }
+    state.connectorStatus = connectorStatus;
+    const { status, walletInfo } = connectorStatus;
+    const tonConnectProvider2 = await initTonConnectProvider(runtime);
+    if (status === "Connected" && walletInfo) {
+      callback?.({
+        text: `Current wallet status: Connected
+Address: ${toUserFriendlyAddress(walletInfo.account.address)}
+Raw Address: ${walletInfo.account.address}
+Chain: ${walletInfo.account.chain}
+Platform: ${walletInfo.device.platform}
+App: ${walletInfo.device.appName || "Unknown"}`
+      });
+      return true;
+    }
+    if (status === "Disconnected" && tonConnectProvider2) {
+      const unified = await tonConnectProvider2.connect();
+      const qrCodeData = await QRCode.toDataURL(unified);
+      callback?.({
+        text: `Please connect your TON wallet using this link:
+${unified}`,
+        attachments: [
+          {
+            id: crypto.randomUUID(),
+            url: qrCodeData,
+            title: "TON Wallet Connect QR Code",
+            source: "tonConnect",
+            description: "Scan this QR code with your TON wallet",
+            contentType: "image/png",
+            text: "Scan this QR code with your TON wallet"
+          }
+        ]
+      });
+      return true;
+    }
+    if (status === "Connecting") {
+      callback?.({
+        text: "Connecting to TON wallet..."
+      });
+      return true;
+    }
+    return true;
+  },
+  examples: [
+    // Example 1: Initial connection request
+    [
+      {
+        user: "{{user1}}",
+        content: {
+          text: "Connect my TON wallet",
+          action: "TON_CONNECT"
+        }
+      },
+      {
+        user: "{{user2}}",
+        content: {
+          text: "Please connect your TON wallet using this link:\nhttps://app.tonkeeper.com/connect/example-universal-link"
+        }
+      }
+    ],
+    // Example 2: Successful connection
+    [
+      {
+        user: "{{user1}}",
+        content: {
+          text: "Check my TON wallet connection",
+          action: "TON_CONNECT"
+        }
+      },
+      {
+        user: "{{user2}}",
+        content: {
+          text: "Connected to TON wallet:\nAddress: EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4\nChain: mainnet\nPlatform: web"
+        }
+      }
+    ],
+    // Example 3: Connection in progress
+    [
+      {
+        user: "{{user1}}",
+        content: {
+          text: "Link TON wallet",
+          action: "TON_CONNECT"
+        }
+      },
+      {
+        user: "{{user2}}",
+        content: {
+          text: "Connecting to TON wallet..."
+        }
+      }
+    ],
+    // Example 4: Error case
+    [
+      {
+        user: "{{user1}}",
+        content: {
+          text: "Connect wallet",
+          action: "TON_CONNECT"
+        }
+      },
+      {
+        user: "{{user2}}",
+        content: {
+          text: "Error connecting to TON wallet. Please try again later."
+        }
+      }
+    ]
+  ]
+};
+var disconnectAction = {
+  name: "TON_DISCONNECT",
+  similes: [
+    "TON_DISCONNECT",
+    "DISCONNECT_TON_WALLET",
+    "DISCONNECT_WALLET",
+    "LOGOUT_TON_WALLET"
+  ],
+  description: "disconnect from connected ton wallet",
+  validate: async (runtime, message) => {
+    const tonConnectProvider2 = await initTonConnectProvider(runtime);
+    if (!tonConnectProvider2) return false;
+    return tonConnectProvider2.isConnected();
+  },
+  handler: async (runtime, message, state, _options, callback) => {
+    if (!state) {
+      state = await runtime.composeState(message);
+    } else {
+      state = await runtime.updateRecentMessageState(state);
+    }
+    elizaLogger3.log("Starting TON_DISCONNECT handler...");
+    const tonConnectProvider2 = await initTonConnectProvider(runtime);
+    if (!tonConnectProvider2) {
+      callback?.({
+        text: "Error disconnecting from TON wallet. Wallet provider not initialized."
+      });
+      return true;
+    }
+    try {
+      await tonConnectProvider2.disconnect();
+      callback?.({
+        text: "Successfully disconnected from TON wallet."
+      });
+    } catch (error) {
+      callback?.({
+        text: "Error disconnecting from TON wallet. Please try again later."
+      });
+    }
+    return true;
+  },
+  examples: [
+    // Example 1: Successful disconnection
+    [
+      {
+        user: "{{user1}}",
+        content: {
+          text: "Disconnect my TON wallet",
+          action: "TON_DISCONNECT"
+        }
+      },
+      {
+        user: "{{user2}}",
+        content: {
+          text: "Successfully disconnected from TON wallet."
+        }
+      }
+    ],
+    // Example 2: Error case
+    [
+      {
+        user: "{{user1}}",
+        content: {
+          text: "Disconnect wallet",
+          action: "TON_DISCONNECT"
+        }
+      },
+      {
+        user: "{{user2}}",
+        content: {
+          text: "Error disconnecting from TON wallet. Please try again later."
+        }
+      }
+    ]
+  ]
+};
+var showConnectionStatusAction = {
+  name: "TON_CONNECTION_STATUS",
+  similes: [
+    "TON_STATUS",
+    "WALLET_STATUS",
+    "CHECK_TON_CONNECTION",
+    "SHOW_WALLET_STATUS"
+  ],
+  description: "show current TON wallet connection status",
+  validate: async (runtime, _message) => {
+    const tonConnectProvider2 = await initTonConnectProvider(runtime);
+    return !!tonConnectProvider2;
+  },
+  handler: async (runtime, message, state, _options, callback) => {
+    if (!state) {
+      state = await runtime.composeState(message);
+    } else {
+      state = await runtime.updateRecentMessageState(state);
+    }
+    elizaLogger3.log("Starting TON_CONNECTION_STATUS handler...");
+    const connectorStatus = await tonConnectProvider.get(
+      runtime,
+      message,
+      state
+    );
+    if (!connectorStatus) {
+      callback?.({
+        text: "Unable to fetch wallet connection status."
+      });
+      return true;
+    }
+    const { status, walletInfo } = connectorStatus;
+    switch (status) {
+      case "Connected":
+        if (walletInfo) {
+          callback?.({
+            text: `Current wallet status: Connected
+Address: ${toUserFriendlyAddress(
+              walletInfo.account.address
+            )}
+Raw Address: ${walletInfo.account.address}
+Chain: ${walletInfo.account.chain}
+Platform: ${walletInfo.device.platform}
+App: ${walletInfo.device.appName || "Unknown"}`
+          });
+        }
+        break;
+      case "Connecting":
+        callback?.({
+          text: "Wallet status: Connection in progress..."
+        });
+        break;
+      case "Disconnected":
+        callback?.({
+          text: "Wallet status: Not connected\nUse TON_CONNECT to connect your wallet."
+        });
+        break;
+      default:
+        callback?.({
+          text: `Wallet status: ${status}`
+        });
+    }
+    return true;
+  },
+  examples: [
+    // Example 1: Connected wallet status
+    [
+      {
+        user: "{{user1}}",
+        content: {
+          text: "Show my wallet status",
+          action: "TON_CONNECTION_STATUS"
+        }
+      },
+      {
+        user: "{{user2}}",
+        content: {
+          text: "Current wallet status: Connected\nAddress: EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4\nChain: mainnet\nPlatform: web\nApp: Tonkeeper"
+        }
+      }
+    ],
+    // Example 2: Disconnected status
+    [
+      {
+        user: "{{user1}}",
+        content: {
+          text: "Check wallet connection",
+          action: "TON_CONNECTION_STATUS"
+        }
+      },
+      {
+        user: "{{user2}}",
+        content: {
+          text: "Wallet status: Not connected\nUse TON_CONNECT to connect your wallet."
+        }
+      }
+    ],
+    // Example 3: Connecting status
+    [
+      {
+        user: "{{user1}}",
+        content: {
+          text: "What's my wallet status",
+          action: "TON_CONNECTION_STATUS"
+        }
+      },
+      {
+        user: "{{user2}}",
+        content: {
+          text: "Wallet status: Connection in progress..."
+        }
+      }
+    ]
+  ]
+};
+
 // src/index.ts
 var tonPlugin = {
   name: "ton",
   description: "Ton Plugin for Eliza",
-  actions: [transfer_default],
+  actions: [
+    transfer_default,
+    connectAction,
+    disconnectAction,
+    showConnectionStatusAction,
+    tonConnectTransaction_default
+  ],
   evaluators: [],
-  providers: [nativeWalletProvider]
+  providers: [nativeWalletProvider, tonConnectProvider]
 };
 var index_default = tonPlugin;
 export {
