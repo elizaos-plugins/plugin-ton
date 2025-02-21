@@ -145,7 +145,7 @@ const buildGetCollectionData = async (
   const content = await generateObject({
     runtime,
     context: getCollectionContext,
-    schema: getCollectionDataSchema,
+    schema: getCollectionDataSchema as any,
     modelClass: ModelClass.SMALL,
   });
 
