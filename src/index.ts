@@ -8,6 +8,11 @@ import getPoolInfoAction from "./actions/getPoolInfo.ts";
 import { WalletProvider, nativeWalletProvider } from "./providers/wallet.ts";
 import tokenPriceAction from "./actions/tokenPrice.ts";
 import { tonTokenPriceProvider } from "./providers/tokenProvider.ts";
+import { borrowAction } from "./actions/lend_borrow/borrow";
+import { supplyAction } from "./actions/lend_borrow/supply";
+import { withdrawAction } from "./actions/lend_borrow/withdraw";
+import { repayAction } from "./actions/lend_borrow/repay";
+import { positionsAction } from "./actions/lend_borrow/positions";
 
 export { WalletProvider, transferAction as TransferTonToken };
 export { tokenPriceAction as GetTokenPrice };
@@ -44,6 +49,11 @@ export const tonPlugin: Plugin = {
     stakeAction,
     unstakeAction,
     getPoolInfoAction,
+    borrowAction,
+    supplyAction,
+    withdrawAction,
+    repayAction,
+    positionsAction,
     connectAction,
     disconnectAction,
     showConnectionStatusAction,
