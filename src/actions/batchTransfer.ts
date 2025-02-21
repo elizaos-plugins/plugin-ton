@@ -9,17 +9,18 @@ import {
     type HandlerCallback,
     Content,
   } from "@elizaos/core";
-  import { Address, internal, SendMode, toNano } from "@ton/ton";
+  import { Address, beginCell, internal, JettonMaster, SendMode, toNano } from "@ton/ton";
   import { Builder } from "@ton/ton";
   import { z } from "zod";
   import { initWalletProvider, nativeWalletProvider, WalletProvider } from "../providers/wallet";
-  import { base64ToHex, sanitizeTonAddress, sleep, waitSeqno } from "../utils/util";
+  import { base64ToHex, sanitizeTonAddress, sleep, waitSeqnoContract } from "../utils/util";
   
   export interface SingleTransferContent extends Content {
     type: "ton" | "token" | "nft";
     recipientAddress: string;
     amount?: string;
     tokenId?: string;
+    jettonMasterAddress?: string;
     metadata?: string;
   }
   
@@ -48,6 +49,7 @@ import {
         recipientAddress: z.string().nonempty("Recipient address is required"),
         amount: z.string().optional(),
         tokenId: z.string().optional(),
+        jettonMasterAddress: z.string().optional(),
         metadata: z.string().optional(),
       })
       // TON transfers require an amount.
@@ -55,15 +57,19 @@ import {
         message: "Amount is required for TON transfers",
         path: ["amount"],
       })
-      // Token and NFT transfers require a tokenId.
-      .refine((data) => (data.type === "token" || data.type === "nft" ? !!data.tokenId : true), {
-        message: "tokenId is required for token and NFT transfers",
-        path: ["tokenId"],
+      // Token transfers require jettonMasterAddress and amount
+      .refine((data) => (data.type === "token" ? !!data.jettonMasterAddress : true), {
+        message: "jettonMasterAddress is required for token transfers",
+        path: ["jettonMasterAddress"],
       })
-      // Token transfers also require an amount.
       .refine((data) => (data.type === "token" ? !!data.amount : true), {
         message: "Amount is required for token transfers",
         path: ["amount"],
+      })
+      // NFT transfers require a tokenId
+      .refine((data) => (data.type === "nft" ? !!data.tokenId : true), {
+        message: "tokenId is required for NFT transfers",
+        path: ["tokenId"],
       });
   
   // Schema for a batch transfer request.
@@ -78,12 +84,16 @@ import {
         "type": "<ton|token|nft>",
         "recipientAddress": "<Recipient's TON address>",
         "amount": "<Transfer amount as string (required for ton and token transfers)>",
-        "tokenId": "<Token contract address or NFT identifier (required for token and nft transfers)>",
+        "jettonMasterAddress": "<Jetton master contract address (required for token transfers)>",
+        "tokenId": "<NFT item address (required for nft transfers)>",
         "metadata": "<Optional metadata if applicable>"
       }
     ]
   }
   {{recentMessages}}
+  
+  Don't create multiple objects in the transfers array for the same token.
+  Don't create multiple objects in the transfers array for the same NFT.
   
   Extract and output only these values.`;
   
@@ -131,27 +141,33 @@ import {
     /**
      * Build a token transfer message.
      */
-    private buildTokenTransfer(item: TransferItem): ReportWithMessage {
-      const forwardPayload = new Builder()
-        .storeUint(0, 32) // Using 0 opcode for a comment or payload placeholder.
-        .storeBuffer(Buffer.from(item.metadata || "", "utf-8"))
+    private async buildTokenTransfer(item: TransferItem): Promise<ReportWithMessage> {
+      const tokenAddress = Address.parse(item.jettonMasterAddress!);
+      const client = this.walletProvider.getWalletClient();
+      const jettonMaster = client.open(JettonMaster.create(tokenAddress));
+      
+      const jettonWalletAddress = await jettonMaster.getWalletAddress(this.walletProvider.wallet.address);
+      
+      const forwardPayload = beginCell()
+        .storeUint(0, 32) // 0 opcode means we have a comment
+        .storeStringTail(item.metadata || "Hello, TON!")
         .endCell();
   
       const tokenTransferBody = new Builder()
-        .storeUint(0x0f8a7ea5, 32) // Opcode for token transfer (e.g., Jetton)
-        .storeUint(0, 64) // Query id placeholder
+        .storeUint(0x0f8a7ea5, 32)
+        .storeUint(0, 64)
         .storeCoins(toNano(item.amount!))
         .storeAddress(Address.parse(item.recipientAddress))
-        .storeAddress(Address.parse(item.recipientAddress)) // Response destination (can be custom)
-        .storeBit(0) // No custom payload flag
-        .storeCoins(toNano("0.02")) // Forward amount for notification message
-        .storeBit(1) // Indicates forwardPayload is referenced
+        .storeAddress(Address.parse(item.recipientAddress))
+        .storeBit(0)
+        .storeCoins(toNano("0.02"))
+        .storeBit(1)
         .storeRef(forwardPayload)
         .endCell();
   
       const message = internal({
-        to: Address.parse(item.tokenId!),
-        value: toNano(item.amount),
+        to: jettonWalletAddress,
+        value: toNano('0.1'),
         bounce: true,
         body: tokenTransferBody,
       });
@@ -166,7 +182,7 @@ import {
         },
         message,
     };
-      return report
+      return report;
     }
   
     /**
@@ -198,6 +214,83 @@ import {
       };
     }
   
+    private async processTransferItem(item: TransferItem): Promise<ReportWithMessage> {
+      const recipientAddress = sanitizeTonAddress(item.recipientAddress);
+      if (!recipientAddress) {
+        throw new Error(`Invalid recipient address: ${item.recipientAddress}`);
+      }
+      item.recipientAddress = recipientAddress;
+
+      if (item.type === "nft" && item.tokenId) {
+        const tokenAddress = sanitizeTonAddress(item.tokenId);
+        if (!tokenAddress) {
+          throw new Error(`Invalid token address: ${item.tokenId}`);
+        }
+        item.tokenId = tokenAddress;
+      }
+
+      switch (item.type) {
+        case "ton":
+          return this.buildTonTransfer(item);
+        case "token":
+          elizaLogger.debug(`Processing token transfer to ${recipientAddress} for token ${item.jettonMasterAddress}`);
+          const result = await this.buildTokenTransfer(item);
+          elizaLogger.debug(`Token transfer build complete`);
+          return result;
+        case "nft":
+          return this.buildNftTransfer(item);
+        default:
+          throw new Error(`Unsupported transfer type: ${item.type}`);
+      }
+    }
+
+    private async executeTransfer(messages: any[], transferReports: Report[]): Promise<string | null> {
+      try {
+        const walletClient = this.walletProvider.getWalletClient();
+        const contract = walletClient.open(this.walletProvider.wallet);
+
+        const seqno: number = await contract.getSeqno();
+        await sleep(1500);
+
+        const transfer = await contract.createTransfer({
+          seqno,
+          secretKey: this.walletProvider.keypair.secretKey,
+          messages,
+          sendMode: SendMode.IGNORE_ERRORS + SendMode.PAY_GAS_SEPARATELY,
+        });
+
+        await sleep(1500);
+        await contract.send(transfer);
+
+        await waitSeqnoContract(seqno, contract);
+        const state = await walletClient.getContractState(this.walletProvider.wallet.address);
+        const { hash: lastHash } = state.lastTransaction;
+        const txHash = base64ToHex(lastHash);
+
+        elizaLogger.log(JSON.stringify(transfer));
+
+        // Update reports for successfully processed transfers
+        transferReports.forEach(report => {
+          if (report.status === "pending") {
+            report.status = "success";
+          }
+        });
+
+        return txHash;
+      } catch (error: any) {
+        // Mark any pending transfers as failures
+        transferReports.forEach(report => {
+          if (report.status === "pending") {
+            report.status = "failure";
+            report.error = error.message;
+          }
+        });
+        console.error(JSON.stringify(error));
+        elizaLogger.error("Error during batch transfer:", JSON.stringify(error));
+        return null;
+      }
+    }
+
     /**
      * Creates a batch transfer based on an array of transfer items.
      * Each item is processed with a try/catch inside the for loop to ensure that individual errors
@@ -207,122 +300,46 @@ import {
      * @returns An object with a detailed report for each transfer.
      */
     async createBatchTransfer(params: BatchTransferContent): Promise<{hash?: string; reports: Report[]}> {
-      const { transfers } = params;
-      const transferReports: Report[] = [];
-      const messages = [];
-  
-      // Process each transfer item individually through a try/catch block.
-      for (const item of transfers) {
-        let report: Report = null;
-        let message = null;
-        try {
-          if (item.type === "ton") {
-              const recipientAddress = sanitizeTonAddress(item.recipientAddress);
-              if(!recipientAddress) {
-                  throw new Error(`Invalid recipient address: ${item.recipientAddress}`);
-              }
-              item.recipientAddress = recipientAddress;
-              const result = this.buildTonTransfer(item);
-              message = result.message;
-              report = result.report;
-          } else if (item.type === "token") {
-              const recipientAddress = sanitizeTonAddress(item.recipientAddress);
-              if(!recipientAddress) {
-                  throw new Error(`Invalid recipient address: ${item.recipientAddress}`);
-              }
-              item.recipientAddress = recipientAddress;
-              const tokenAddress = sanitizeTonAddress(item.tokenId);
-              if(!tokenAddress) {
-                  throw new Error(`Invalid token address: ${item.tokenId}`);
-              }
-              item.tokenId = tokenAddress;
-              const result = this.buildTokenTransfer(item);
-              message = result.message;
-              report = result.report;
-          } else if (item.type === "nft") {
-              const recipientAddress = sanitizeTonAddress(item.recipientAddress);
-              if(!recipientAddress) {
-                  throw new Error(`Invalid recipient address: ${item.recipientAddress}`);
-              }
-              item.recipientAddress = recipientAddress;
-              const tokenAddress = sanitizeTonAddress(item.tokenId);
-              if(!tokenAddress) {
-                  throw new Error(`Invalid token address: ${item.tokenId}`);
-              }
-              item.tokenId = tokenAddress;
-              const result = this.buildNftTransfer(item);
-              message = result.message;
-              report = result.report;
-          } else {
-            throw new Error(`Unsupported transfer type: ${item.type}`);
-          }
-        } catch (error: any) {
-           report = {
-              type: item.type,
-              recipientAddress: item.recipientAddress,
-              amount: item.amount,
-              tokenId: item.tokenId,
-              status: "failure",
-              error: JSON.stringify(error),
+      const processResults = await Promise.all(
+        params.transfers.map(async (item) => {
+          try {
+            elizaLogger.debug(`Processing transfer item of type ${item.type}`);
+            const result = await this.processTransferItem(item);
+            return {
+              success: true,
+              message: result.message,
+              report: result.report
             };
-        }
-        transferReports.push(report);
-        if (message) {
-          messages.push(message);
-        }
-      }
-  
-      // if (messages.length === 0) {
-      //   return null;
-      // }
-  
-      try {
-        // Open the wallet contract and fetch the current sequence number.
-        const walletClient = this.walletProvider.getWalletClient();
-        const contract = walletClient.open(this.walletProvider.wallet);
-  
-        const seqno: number = await contract.getSeqno();
-        await sleep(1500);
-        // Create a batch transfer containing all valid messages.
-        const transfer = await contract.createTransfer({
-          seqno,
-          secretKey: this.walletProvider.keypair.secretKey,
-          messages,
-          sendMode: SendMode.IGNORE_ERRORS + SendMode.PAY_GAS_SEPARATELY,
-        });
-  
-        await sleep(1500);
-        await contract.send(transfer);
-  
-        await waitSeqno(seqno, contract);
-        const state = await walletClient.getContractState(
-            this.walletProvider.wallet.address,
-        );
-        const { lt: _, hash: lastHash } = state.lastTransaction;
-        const txHash = base64ToHex(lastHash);
-  
-        elizaLogger.log(JSON.stringify(transfer));
-  
-        // Update reports for successfully processed transfers.
-        for (const report of transferReports) {
-          if (report.status === "pending") {
-            report.status = "success";
+          } catch (error: any) {
+            elizaLogger.error(`Error processing transfer: ${error.message}`);
+            return {
+              success: false,
+              message: null,
+              report: {
+                type: item.type,
+                recipientAddress: item.recipientAddress,
+                amount: item.amount,
+                tokenId: item.tokenId,
+                status: "failure",
+                error: error.message,
+              }
+            };
           }
+        })
+      );
+
+      const transferReports: Report[] = [];
+      const messages: any[] = [];
+
+      processResults.forEach(result => {
+        if (result.success && result.message) {
+          messages.push(result.message);
         }
-  
-        return {hash: txHash, reports: transferReports};
-      } catch (error: any) {
-        // On error, mark any pending transfers as failures.
-        for (const report of transferReports) {
-          if (report.status === "pending") {
-            report.status = "failure";
-            report.error = error.message;
-          }
-        }
-        console.error(JSON.stringify(error));
-        elizaLogger.error("Error during batch transfer:", JSON.stringify(error));
-        return {hash: null, reports: transferReports};
-      }
+        transferReports.push(result.report);
+      });
+
+      const hash = await this.executeTransfer(messages, transferReports);
+      return { hash, reports: transferReports };
     }
   }
   
@@ -384,6 +401,7 @@ import {
       elizaLogger.log("Starting BATCH_TRANSFER handler...");
   
       const details = await buildBatchTransferDetails(runtime, message, state);
+      console.log(details);
       if(!isBatchTransferContent(details)) {
           console.error("Invalid content for BATCH_TRANSFER action.");
           if (callback) {
@@ -438,7 +456,7 @@ import {
         {
           user: "{{user1}}",
           content: {
-            text: "Transfer 1 TON to 0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB and 1 0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5 to 0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
+            text: "Transfer 1 TON to 0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB and 1 SCALE token to 0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
             action: "BATCH_TRANSFER"
           }
         },

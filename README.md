@@ -20,7 +20,7 @@ This plugin provides functionality to:
 ### Screenshot
 
 ![alt text](./screenshot/transfer.png "Transfer TON")
-
+![alt text](./screenshot/jetton-transfer.png "Transfer Jetton")
 ![alt text](./screenshot/connect.png "Connect with TonConnect QR Code")
 ![alt text](./screenshot/status.png "TonConnect Status")
 ![alt text](./screenshot/disconnect.png "Disconnect")
