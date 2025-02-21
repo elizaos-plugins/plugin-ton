@@ -189,15 +189,19 @@ import {
      * Build an NFT transfer message.
      */
     private buildNftTransfer(item: TransferItem): ReportWithMessage {
-      const nftTransferBody = new Builder()
-        .storeUint(3, 32) // Opcode for transferring NFT ownership
-        .storeUint(0, 64) // Query id placeholder
-        .storeAddress(Address.parse(item.recipientAddress))
+      const nftTransferBody = beginCell()
+        .storeUint(0x5fcc3d14, 32) // OP transfer
+        .storeUint(0, 64) // query_id
+        .storeAddress(Address.parse(item.recipientAddress)) // new_owner
+        .storeAddress(this.walletProvider.wallet.address) // response_destination (sender's address)
+        .storeMaybeRef(null) // custom_payload (null in this case)
+        .storeCoins(toNano('0.01')) // forward_amount (0.01 TON for notification)
+        .storeMaybeRef(null) // forward_payload (null in this case)
         .endCell();
   
       const message = internal({
         to: Address.parse(item.tokenId!),
-        value: toNano("0.05"), // Fixed fee for NFT transfers; may be adjusted.
+        value: toNano('0.05'), // Gas fee for the transfer
         bounce: true,
         body: nftTransferBody,
       });
@@ -210,7 +214,6 @@ import {
           tokenId: item.tokenId,
           status: "pending",
         },
-  
       };
     }
   
