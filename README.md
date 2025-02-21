@@ -21,6 +21,7 @@ This plugin provides functionality to:
 
 ![alt text](./screenshot/transfer.png "Transfer TON")
 ![alt text](./screenshot/jetton-transfer.png "Transfer Jetton")
+![alt text](./screenshot/ton-jetton-batch-transfer.png "Transfer Jetton and TON")
 ![alt text](./screenshot/connect.png "Connect with TonConnect QR Code")
 ![alt text](./screenshot/status.png "TonConnect Status")
 ![alt text](./screenshot/disconnect.png "Disconnect")
