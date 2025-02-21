@@ -123,6 +123,23 @@ const batchTransfers = {
 const reports = await batchTransferAction.createBatchTransfer(batchTransfers);
 ```
 
+### Create Ton Wallet Action
+
+The `CreateTonWallet` action handles on-demand wallet creation with encrypted key storage from user-supplied encryption key:
+
+```typescript
+import { CreateTonWallet } from "@elizaos/plugin-ton";
+
+// Initialize transfer action
+const action = new CreateTonWallet(runtime);
+
+// Execute transfer
+const { walletAddress, mnemonic } = await action.createNewWallet({
+    rpcUrl: "https://toncenter.com/api/v2/jsonRPC",
+    encryptionPassword: "GAcAWFv6ZXuaJOuSqemxku4",
+});
+```
+
 ## Development
 
 ### Building

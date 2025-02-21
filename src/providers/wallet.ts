@@ -6,17 +6,22 @@ import type {
     State,
 } from "@elizaos/core";
 
-import { TonClient, WalletContractV4, fromNano } from "@ton/ton";
+import { TonClient, WalletContractV4 } from "@ton/ton";
 import {
     type KeyPair,
-    mnemonicToPrivateKey,
     mnemonicToWalletKey,
+    mnemonicNew
 } from "@ton/crypto";
 
 import NodeCache from "node-cache";
 import * as path from "node:path";  // Changed to use node: protocol
 import BigNumber from "bignumber.js";
 import { CONFIG_KEYS } from "../enviroment";
+
+import crypto from "node:crypto";
+
+// New import for file operations:
+import fs from "node:fs";
 
 const PROVIDER_CONFIG = {
     MAINNET_RPC: "https://toncenter.com/api/v2/jsonRPC",
@@ -37,6 +42,26 @@ interface WalletPortfolio {
 
 interface Prices {
     nativeToken: { usd: BigNumber };
+}
+
+// Helper functions to encrypt and decrypt text using AES-256-CBC:
+function encrypt(text: string, password: string): string {
+    const iv = crypto.randomBytes(16);
+    const key = crypto.scryptSync(password, 'salt', 32);
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    return iv.toString('hex') + ':' + encrypted;
+}
+
+function decrypt(encrypted: string, password: string): string {
+    const [ivHex, encryptedText] = encrypted.split(':');
+    const iv = Buffer.from(ivHex, 'hex');
+    const key = crypto.scryptSync(password, 'salt', 32);
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
 }
 
 export class WalletProvider {
@@ -270,20 +295,89 @@ export class WalletProvider {
             return null;
         }
     }
+    
+    /**
+     * Generates a new wallet on demand.
+     * Returns the WalletProvider instance along with the mnemonic (for backup).
+     * The mnemonic should be stored securely by the AI agent.
+     * Additionally, the wallet's keypair is exported as an encrypted backup
+     * using the provided password, and stored in a file.
+     */
+    static async generateNew(rpcUrl: string, password: string, cacheManager: ICacheManager): Promise<{ walletProvider: WalletProvider; mnemonic: string[] }> {
+        const mnemonic = await mnemonicNew(24, password);
+        const keypair = await mnemonicToWalletKey(mnemonic, password);
+        const walletProvider = new WalletProvider(keypair, rpcUrl, cacheManager);
+
+        // Export the wallet keys as encrypted JSON string using the provided password
+        const encryptedKeyBackup = await walletProvider.exportWallet(password);
+
+        // Define a backup directory and file name
+        const backupDir = path.join(process.cwd(), "ton_wallet_backups");
+        if (!fs.existsSync(backupDir)) {
+            fs.mkdirSync(backupDir, { recursive: true });
+        }
+        const fileName = `${walletProvider.getAddress()}_wallet_backup.json`;
+        const filePath = path.join(backupDir, fileName);
+
+        // Write the encrypted key backup to file
+        fs.writeFileSync(filePath, encryptedKeyBackup, { encoding: "utf-8" });
+        console.log(`Wallet backup saved to ${filePath}`);
+
+        return { walletProvider, mnemonic };
+    }
+
+    /**
+     * Imports a wallet from an encrypted backup file.
+     * Reads the backup file content, decrypts it using the provided password, and returns a WalletProvider instance.
+     */
+    static async importWalletFromFile(runtime: IAgentRuntime, walletAddress: string, password: string): Promise<WalletProvider> {
+        // Define a backup directory and file name
+        const backupDir = path.join(process.cwd(), "ton_wallet_backups");
+        if (!fs.existsSync(backupDir)) {
+            fs.mkdirSync(backupDir, { recursive: true });
+        }
+        const fileName = `${walletAddress}_wallet_backup.json`;
+        const filePath = path.join(backupDir, fileName);
+
+        if (!fs.existsSync(filePath)) {
+            throw new Error(`Wallet backup file does not exist at: ${filePath}`);
+        }
+        const encryptedData = fs.readFileSync(filePath, { encoding: "utf-8" });
+        const walletProvider = await WalletProvider.importWallet(encryptedData, password, runtime);
+        return walletProvider;
+    }
+
+    /**
+     * Exports the wallet's keypair as an encrypted JSON string.
+     */
+    async exportWallet(password: string): Promise<string> {
+        // Serialize the keypair (private keys should never be logged or shown directly)
+        const keyData = JSON.stringify({
+            publicKey: Buffer.from(this.keypair.publicKey).toString('hex'),
+            secretKey: Buffer.from(this.keypair.secretKey).toString('hex'),
+        });
+        return encrypt(keyData, password);
+    }
+
+    /**
+     * Imports a wallet from its encrypted backup.
+     */
+    static async importWallet(
+        encryptedData: string,
+        password: string,
+        runtime: IAgentRuntime
+    ): Promise<WalletProvider> {
+        const decrypted = decrypt(encryptedData, password);
+        const keyData = JSON.parse(decrypted);
+        const keypair: KeyPair = {
+            publicKey: Buffer.from(keyData.publicKey, 'hex'),
+            secretKey: Buffer.from(keyData.secretKey, 'hex'),
+        };
+        const rpcUrl = runtime.getSetting("TON_RPC_URL") || PROVIDER_CONFIG.MAINNET_RPC;
+        return new WalletProvider(keypair, rpcUrl, runtime.cacheManager);
+    }
+
 }
-
-// export const initWalletProvider = async (runtime: IAgentRuntime) => {
-//     const privateKey = runtime.getSetting(CONFIG_KEYS.TON_PRIVATE_KEY);
-//     let mnemonics: string[];
-
-//     if (!privateKey) {
-//         throw new Error(`${CONFIG_KEYS.TON_PRIVATE_KEY} is missing`);
-//     } else {
-//         mnemonics = privateKey.split(" ");
-//         if (mnemonics.length < 2) {
-//             throw new Error(`${CONFIG_KEYS.TON_PRIVATE_KEY} mnemonic seems invalid`);
-//         }
-//     }
 
 export const initWalletProvider = async (runtime: IAgentRuntime) => {
     const privateKey = runtime.getSetting(CONFIG_KEYS.TON_PRIVATE_KEY);
@@ -300,7 +394,7 @@ export const initWalletProvider = async (runtime: IAgentRuntime) => {
     const rpcUrl =
         runtime.getSetting("TON_RPC_URL") || PROVIDER_CONFIG.MAINNET_RPC;
 
-    const keypair = await mnemonicToWalletKey(mnemonics, "");
+    const keypair = await mnemonicToWalletKey(mnemonics);
     return new WalletProvider(keypair, rpcUrl, runtime.cacheManager);
 };
 
