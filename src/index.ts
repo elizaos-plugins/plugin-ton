@@ -5,6 +5,7 @@ import loadWalletAction from "./actions/loadWallet.ts";
 import stakeAction from "./actions/stake.ts";
 import unstakeAction from "./actions/unstake.ts";
 import getPoolInfoAction from "./actions/getPoolInfo.ts";
+import batchTransferAction from "./actions/batchTransfer.ts";
 import { WalletProvider, nativeWalletProvider } from "./providers/wallet.ts";
 import tokenPriceAction from "./actions/tokenPrice.ts";
 import { tonTokenPriceProvider } from "./providers/tokenProvider.ts";
@@ -32,6 +33,7 @@ import {
   showConnectionStatusAction,
 } from "./actions/tonConnect.ts";
 import tonConnectTransactionAction from "./actions/tonConnectTransaction.ts";
+export { batchTransferAction as BatchTransferTokens };
 
 
 export const tonPlugin: Plugin = {
@@ -44,6 +46,7 @@ export const tonPlugin: Plugin = {
     stakeAction,
     unstakeAction,
     getPoolInfoAction,
+    batchTransferAction,
     connectAction,
     disconnectAction,
     showConnectionStatusAction,
