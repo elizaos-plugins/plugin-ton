@@ -80,12 +80,9 @@ import {
     return Array.isArray(data) ? data : [data];
   });
   
-  const batchTransferTemplate = `Return a JSON array or single object for the transfer(s). The response should contain no schema information or additional properties.
+  const batchTransferTemplate = `Return a JSON array for the transfer(s). The response should contain no schema information or additional properties.
   
-  Example formats:
-
-  
-  Multiple transfers:
+  Example:
   [
     {
       "type": "ton",
