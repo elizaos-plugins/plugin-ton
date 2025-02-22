@@ -15,7 +15,7 @@ import {
   import { initWalletProvider, nativeWalletProvider, WalletProvider } from "../providers/wallet";
   import { base64ToHex, sanitizeTonAddress, sleep, waitSeqnoContract } from "../utils/util";
   
-  export interface SingleTransferContent extends Content {
+  export interface SingleTransferContent {
     type: "ton" | "token" | "nft";
     recipientAddress: string;
     amount?: string;
@@ -24,9 +24,7 @@ import {
     metadata?: string;
   }
   
-  export interface BatchTransferContent extends Content {
-    transfers: SingleTransferContent[];
-  }
+  export type BatchTransferContent = SingleTransferContent[];
   
   interface Report {
     type: string;
@@ -43,67 +41,145 @@ import {
   }
   
   // Schema for each transfer item in the batch.
-    const transferItemSchema = z
-      .object({
-        type: z.enum(["ton", "token", "nft"]),
-        recipientAddress: z.string().nonempty("Recipient address is required"),
-        amount: z.string().optional(),
-        tokenId: z.string().optional(),
-        jettonMasterAddress: z.string().optional(),
-        metadata: z.string().optional(),
-      })
-      // TON transfers require an amount.
-      .refine((data) => (data.type === "ton" ? !!data.amount : true), {
-        message: "Amount is required for TON transfers",
-        path: ["amount"],
-      })
-      // Token transfers require jettonMasterAddress and amount
-      .refine((data) => (data.type === "token" ? !!data.jettonMasterAddress : true), {
-        message: "jettonMasterAddress is required for token transfers",
-        path: ["jettonMasterAddress"],
-      })
-      .refine((data) => (data.type === "token" ? !!data.amount : true), {
-        message: "Amount is required for token transfers",
-        path: ["amount"],
-      })
-      // NFT transfers require a tokenId
-      .refine((data) => (data.type === "nft" ? !!data.tokenId : true), {
-        message: "tokenId is required for NFT transfers",
-        path: ["tokenId"],
-      });
+  const transferItemSchema = z
+    .object({
+      type: z.enum(["ton", "token", "nft"]),
+      recipientAddress: z.string().nonempty("Recipient address is required"),
+      amount: z.string().optional(),
+      tokenId: z.string().optional(),
+      jettonMasterAddress: z.string().optional(),
+      metadata: z.string().optional(),
+    })
+    // TON transfers require an amount.
+    .refine((data) => (data.type === "ton" ? !!data.amount : true), {
+      message: "Amount is required for TON transfers",
+      path: ["amount"],
+    })
+    // Token transfers require jettonMasterAddress and amount
+    .refine((data) => (data.type === "token" ? !!data.jettonMasterAddress : true), {
+      message: "jettonMasterAddress is required for token transfers",
+      path: ["jettonMasterAddress"],
+    })
+    .refine((data) => (data.type === "token" ? !!data.amount : true), {
+      message: "Amount is required for token transfers",
+      path: ["amount"],
+    })
+    // NFT transfers require a tokenId
+    .refine((data) => (data.type === "nft" ? !!data.tokenId : true), {
+      message: "tokenId is required for NFT transfers",
+      path: ["tokenId"],
+    });
   
-  // Schema for a batch transfer request.
-  const batchTransferSchema = z.object({
-    transfers: z.array(transferItemSchema).min(1, "At least one transfer must be provided"),
+  // Schema for a batch transfer request with relaxed validation
+  const batchTransferSchema = z.union([
+    transferItemSchema,
+    z.array(transferItemSchema)
+  ])
+  .transform(data => {
+    // Normalize to array
+    return Array.isArray(data) ? data : [data];
   });
   
-  const batchTransferTemplate = `Respond with a JSON markdown block containing the properties:
-  {
-    "transfers": [
-      {
-        "type": "<ton|token|nft>",
-        "recipientAddress": "<Recipient's TON address>",
-        "amount": "<Transfer amount as string (required for ton and token transfers)>",
-        "jettonMasterAddress": "<Jetton master contract address (required for token transfers)>",
-        "tokenId": "<NFT item address (required for nft transfers)>",
-        "metadata": "<Optional metadata if applicable>"
-      }
-    ]
-  }
+  const batchTransferTemplate = `Return a JSON array or single object for the transfer(s). The response should contain no schema information or additional properties.
+  
+  Example formats:
+
+  
+  Multiple transfers:
+  [
+    {
+      "type": "ton",
+      "recipientAddress": "address1",
+      "amount": "1"
+    },
+    {
+      "type": "token",
+      "recipientAddress": "address2",
+      "amount": "1",
+      "jettonMasterAddress": "master1"
+    },
+    {
+      "type": "nft",
+      "recipientAddress": "address3",
+      "tokenId": "nft1"
+    }
+  ]
+  
+  Rules:
+  - Each recipient address should appear only once per asset type
+  - Each token (jettonMasterAddress) should appear only once
+  - Each NFT (tokenId) should appear only once
+  - Do not create both NFT and token transfers for the same address
+  - Amounts are required for TON and token transfers
+  - JettonMasterAddress is required for token transfers
+  - TokenId is required for NFT transfers
+  
   {{recentMessages}}
   
-  Don't create multiple objects in the transfers array for the same token.
-  Don't create multiple objects in the transfers array for the same NFT.
-  
-  Extract and output only these values.`;
+  IMPORTANT: Return ONLY the transfer object(s) with no schema information or wrapper object.`;
   
   type TransferItem = z.infer<typeof transferItemSchema>;
   
-  function isBatchTransferContent(content: Content): content is BatchTransferContent {
-    return (
-      Array.isArray(content.transfers) &&
-      content.transfers.every((transfer) => transferItemSchema.safeParse(transfer).success)
-    );
+  function isBatchTransferContent(content: any): content is BatchTransferContent {
+    if (Array.isArray(content)) {
+      return content.every(transfer => transferItemSchema.safeParse(transfer).success);
+    }
+    return transferItemSchema.safeParse(content).success;
+  }
+  
+  /**
+   * Deduplicates transfer items based on type and relevant properties.
+   * Rules:
+   * - Keep only one TON transfer per recipient
+   * - Keep only one token transfer per jettonMasterAddress
+   * - Keep only one NFT transfer per tokenId
+   * - Don't allow both NFT and token transfers for the same address
+   */
+  function deduplicateTransfers(transfers: BatchTransferContent): BatchTransferContent {
+    const uniqueTransfers = new Map<string, SingleTransferContent>();
+    const processedRecipients = new Map<string, Set<string>>();
+
+    for (const transfer of transfers) {
+      let key: string;
+      
+      // Initialize recipient's transfer types set if not exists
+      if (!processedRecipients.has(transfer.recipientAddress)) {
+        processedRecipients.set(transfer.recipientAddress, new Set());
+      }
+      const recipientTransfers = processedRecipients.get(transfer.recipientAddress)!;
+
+      // Generate unique key and check conditions based on transfer type
+      switch (transfer.type) {
+        case 'ton':
+          key = `ton:${transfer.recipientAddress}`;
+          break;
+        case 'token':
+          if (recipientTransfers.has('token') || recipientTransfers.has('nft')) {
+            continue; // Skip if recipient already has token/nft transfer
+          }
+          key = `token:${transfer.jettonMasterAddress}`;
+          break;
+        case 'nft':
+          if (recipientTransfers.has('token') || recipientTransfers.has('nft')) {
+            continue; // Skip if recipient already has token/nft transfer
+          }
+          key = `nft:${transfer.tokenId}`;
+          break;
+        default:
+          continue;
+      }
+
+      // Store transfer if key is unique
+      if (!uniqueTransfers.has(key)) {
+        uniqueTransfers.set(key, transfer);
+        recipientTransfers.add(transfer.type);
+      }
+    }
+
+    const result = Array.from(uniqueTransfers.values());
+    // console.log('Deduplication input:', transfers);
+    // console.log('Deduplication output:', result);
+    return result;
   }
   
   /**
@@ -303,8 +379,11 @@ import {
      * @returns An object with a detailed report for each transfer.
      */
     async createBatchTransfer(params: BatchTransferContent): Promise<{hash?: string; reports: Report[]}> {
+      // Deduplicate transfers before processing
+      const uniqueTransfers = deduplicateTransfers(params);
+      
       const processResults = await Promise.all(
-        params.transfers.map(async (item) => {
+        uniqueTransfers.map(async (item) => {
           try {
             elizaLogger.debug(`Processing transfer item of type ${item.type}`);
             const result = await this.processTransferItem(item);
@@ -374,7 +453,7 @@ import {
       const content = await generateObject({
           runtime,
           context: batchTransferContext,
-          schema: batchTransferSchema as any,
+          schema: batchTransferSchema,
           modelClass: ModelClass.SMALL,
       });
   
@@ -403,7 +482,7 @@ import {
     ) => {
       elizaLogger.log("Starting BATCH_TRANSFER handler...");
   
-      const details = await buildBatchTransferDetails(runtime, message, state);
+      const details: BatchTransferContent = await buildBatchTransferDetails(runtime, message, state);
       console.log(details);
       if(!isBatchTransferContent(details)) {
           console.error("Invalid content for BATCH_TRANSFER action.");
@@ -432,7 +511,7 @@ import {
         }
   
         if(text === "") {
-          text = "Batch transfer processed successfully";
+          text = `Batch transfer processed successfully. \n\n${reports.map((report: Report) => `Transfer to ${report.recipientAddress} ${report.status === "success" ? "succeeded" : "failed"}`).join("\n")} \n\nTotal transfers: ${reports.length} \n\nTransaction hash: ${res.hash}`;
         }
   
         if (callback) {
