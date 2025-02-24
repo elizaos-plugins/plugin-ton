@@ -11,10 +11,21 @@ This plugin provides functionality to:
 - Query wallet balances and portfolio information
 - Format and cache transaction data
 - Interface with TON blockchain via RPC endpoints
+- Connect TON wallets using TonConnect protocol
+- Execute secure token transfers
+- Query wallet connection status
+- Support multiple wallet applications (like Tonkeeper)
+- Support QR Code scanning connection
 
 ### Screenshot
 
 ![alt text](./screenshot/transfer.png "Transfer TON")
+![alt text](./screenshot/jetton-transfer.png "Transfer Jetton")
+![alt text](./screenshot/nft-transfer.png "NFT Transfer")
+![alt text](./screenshot/ton-jetton-batch-transfer.png "Transfer Jetton and TON")
+![alt text](./screenshot/connect.png "Connect with TonConnect QR Code")
+![alt text](./screenshot/status.png "TonConnect Status")
+![alt text](./screenshot/disconnect.png "Disconnect")
 
 ### Quick Start
 
@@ -46,6 +57,8 @@ The plugin requires the following environment variables:
 TON_PRIVATE_KEY=your_mnemonic_phrase  # Required - wallet mnemonic words
 TON_RPC_URL=your_rpc_endpoint  # Optional - defaults to mainnet RPC
 TON_RPC_API_KEY=
+TON_MANIFEST_URL=your_manifest_url  # Required - TonConnect manifest URL
+TON_BRIDGE_URL=your_bridge_url  # Optional - defaults to https://bridge.tonapi.io/bridge
 ```
 
 ## Usage
@@ -56,8 +69,8 @@ Import and register the plugin in your Eliza configuration:
 import { tonPlugin } from "@elizaos/plugin-ton";
 
 export default {
-    plugins: [tonPlugin],
-    // ... other configuration
+  plugins: [tonPlugin],
+  // ... other configuration
 };
 ```
 
@@ -80,6 +93,26 @@ const balance = await provider.getWalletBalance();
 const portfolio = await provider.getFormattedPortfolio(runtime);
 ```
 
+### TonConnectProvider
+
+The `TonConnectProvider` manages wallet connection operations:
+
+```typescript
+import { TonConnectProvider } from "@elizaos/plugin-ton-connect";
+
+// Initialize provider
+const provider = await initTonConnectProvider(runtime);
+
+// Connect wallet
+const universalLink = await provider.connect();
+
+// Check connection status
+const isConnected = provider.isConnected();
+
+// Disconnect
+await provider.disconnect();
+```
+
 ### TransferAction
 
 The `TransferAction` handles token transfers:
@@ -92,8 +125,8 @@ const action = new TransferAction(walletProvider);
 
 // Execute transfer
 const hash = await action.transfer({
-    recipient: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
-    amount: "1.5",
+  recipient: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
+  amount: "1.5",
 });
 ```
 
@@ -184,17 +217,17 @@ npm run test
 
 ```typescript
 interface TransferContent {
-    recipient: string;
-    amount: string | number;
+  recipient: string;
+  amount: string | number;
 }
 
 interface WalletPortfolio {
-    totalUsd: string;
-    totalNativeToken: string;
+  totalUsd: string;
+  totalNativeToken: string;
 }
 
 interface Prices {
-    nativeToken: { usd: string };
+  nativeToken: { usd: string };
 }
 ```
 
@@ -202,12 +235,12 @@ interface Prices {
 
 ```typescript
 const PROVIDER_CONFIG = {
-    MAINNET_RPC: "https://toncenter.com/api/v2/jsonRPC",
-    STONFI_TON_USD_POOL: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
-    CHAIN_NAME_IN_DEXSCREENER: "ton",
-    MAX_RETRIES: 3,
-    RETRY_DELAY: 2000,
-    TON_DECIMAL: BigInt(1000000000),
+  MAINNET_RPC: "https://toncenter.com/api/v2/jsonRPC",
+  STONFI_TON_USD_POOL: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
+  CHAIN_NAME_IN_DEXSCREENER: "ton",
+  MAX_RETRIES: 3,
+  RETRY_DELAY: 2000,
+  TON_DECIMAL: BigInt(1000000000),
 };
 ```
 
@@ -234,56 +267,56 @@ const PROVIDER_CONFIG = {
 
 1. **Wallet Management**
 
-    - Multi-wallet support
-    - Hardware wallet integration
-    - Advanced key management
-    - Batch transaction processing
-    - Custom wallet contracts
-    - Recovery mechanisms
+   - Multi-wallet support
+   - Hardware wallet integration
+   - Advanced key management
+   - Batch transaction processing
+   - Custom wallet contracts
+   - Recovery mechanisms
 
 2. **Smart Contract Integration**
 
-    - Contract deployment tools
-    - FunC contract templates
-    - Testing framework
-    - Upgrade management
-    - Gas optimization
-    - Security analysis
+   - Contract deployment tools
+   - FunC contract templates
+   - Testing framework
+   - Upgrade management
+   - Gas optimization
+   - Security analysis
 
 3. **Token Operations**
 
-    - Jetton creation tools
-    - NFT support enhancement
-    - Token metadata handling
-    - Collection management
-    - Batch transfers
-    - Token standards
+   - Jetton creation tools
+   - NFT support enhancement
+   - Token metadata handling
+   - Collection management
+   - Batch transfers
+   - Token standards
 
 4. **DeFi Features**
 
-    - DEX integration
-    - Liquidity management
-    - Yield farming tools
-    - Price feed integration
-    - Swap optimization
-    - Portfolio tracking
+   - DEX integration
+   - Liquidity management
+   - Yield farming tools
+   - Price feed integration
+   - Swap optimization
+   - Portfolio tracking
 
 5. **Developer Tools**
 
-    - Enhanced debugging
-    - CLI improvements
-    - Documentation generator
-    - Integration templates
-    - Performance monitoring
-    - Testing utilities
+   - Enhanced debugging
+   - CLI improvements
+   - Documentation generator
+   - Integration templates
+   - Performance monitoring
+   - Testing utilities
 
 6. **Network Features**
-    - Workchain support
-    - Sharding optimization
-    - RPC management
-    - Network monitoring
-    - Archive node integration
-    - Custom endpoints
+   - Workchain support
+   - Sharding optimization
+   - RPC management
+   - Network monitoring
+   - Archive node integration
+   - Custom endpoints
 
 We welcome community feedback and contributions to help prioritize these enhancements.
 
