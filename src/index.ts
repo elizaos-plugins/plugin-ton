@@ -13,6 +13,8 @@ import { tonTokenPriceProvider } from "./providers/tokenProvider.ts";
 export { WalletProvider, transferAction as TransferTonToken };
 export { tokenPriceAction as GetTokenPrice };
 import { StakingProvider, nativeStakingProvider } from "./providers/staking.ts";
+import swapStonAction from "./actions/swapSton.ts";
+import queryStonAssetAction from "./actions/queryStonAsset.ts";
 
 export {
   WalletProvider,
@@ -51,7 +53,9 @@ export const tonPlugin: Plugin = {
     disconnectAction,
     showConnectionStatusAction,
     tonConnectTransactionAction,
-    tokenPriceAction
+    tokenPriceAction,
+    swapStonAction,
+    queryStonAssetAction,
   ],
   evaluators: [],
   providers: [nativeWalletProvider, nativeStakingProvider, tonConnectProvider,tonTokenPriceProvider],
