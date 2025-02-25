@@ -14,6 +14,7 @@ import { Builder } from "@ton/core";
 import { z } from "zod";
 import { initWalletProvider, WalletProvider } from "../providers/wallet";
 import { waitSeqnoContract } from "../utils/util";
+import { buildNftFixPriceSaleV3R3Data, destinationAddress, marketplaceAddress, marketplaceFeeAddress } from "../utils/NFTAuction";
 
 /**
  * Schema for auction interaction input.
@@ -42,7 +43,18 @@ const OP_CODES = {
 const auctionInteractionSchema = z
   .object({
     auctionAddress: z.string().nonempty("Auction address is required"),
-    auctionAction: z.enum(["getAuctionData", "bid", "stop", "cancel", "list", "buy", "changePrice", "addValue", "cancelOffer", "getOfferData"]),
+    auctionAction: z.enum([
+      "getAuctionData",
+      "bid",
+      "stop",
+      "cancel",
+      "list",
+      "buy",
+      "changePrice",
+      "addValue",
+      "cancelOffer",
+      "getOfferData",
+    ]),
     bidAmount: z.string().optional(),
     senderAddress: z.string().optional(),
     nftAddress: z.string().optional(),
@@ -66,8 +78,8 @@ const auctionInteractionSchema = z
   )
   .refine(
     (data) =>
-      (data.auctionAction === "stop" || data.auctionAction === "cancel") === false ||
-      (!!data.senderAddress),
+      (data.auctionAction === "stop" || data.auctionAction === "cancel") ===
+        false || !!data.senderAddress,
     {
       message: "For stop or cancel actions, senderAddress is required",
       path: ["senderAddress"],
@@ -91,7 +103,8 @@ const auctionInteractionSchema = z
   )
   .refine(
     (data) =>
-      data.auctionAction !== "changePrice" || (data.auctionAction === "changePrice" && data.newPrice),
+      data.auctionAction !== "changePrice" ||
+      (data.auctionAction === "changePrice" && data.newPrice),
     {
       message: "For changePrice action, newPrice is required",
       path: ["newPrice"],
@@ -99,7 +112,8 @@ const auctionInteractionSchema = z
   )
   .refine(
     (data) =>
-      data.auctionAction !== "addValue" || (data.auctionAction === "addValue" && data.additionalValue),
+      data.auctionAction !== "addValue" ||
+      (data.auctionAction === "addValue" && data.additionalValue),
     {
       message: "For addValue action, additionalValue is required",
       path: ["additionalValue"],
@@ -108,7 +122,17 @@ const auctionInteractionSchema = z
 
 export interface AuctionInteractionContent extends Content {
   auctionAddress: string;
-  auctionAction: "getAuctionData" | "bid" | "stop" | "cancel" | "list" | "buy" | "changePrice" | "addValue" | "cancelOffer" | "getOfferData";
+  auctionAction:
+    | "getAuctionData"
+    | "bid"
+    | "stop"
+    | "cancel"
+    | "list"
+    | "buy"
+    | "changePrice"
+    | "addValue"
+    | "cancelOffer"
+    | "getOfferData";
   bidAmount?: string;
   senderAddress?: string;
   nftAddress?: string;
@@ -122,8 +146,13 @@ export interface AuctionInteractionContent extends Content {
   additionalValue?: string;
 }
 
-function isAuctionInteractionContent(content: Content): content is AuctionInteractionContent {
-  return typeof content.auctionAddress === "string" && typeof content.auctionAction === "string";
+function isAuctionInteractionContent(
+  content: Content
+): content is AuctionInteractionContent {
+  return (
+    typeof content.auctionAddress === "string" &&
+    typeof content.auctionAction === "string"
+  );
 }
 
 const auctionInteractionTemplate = `Respond with a JSON markdown block containing only the extracted values. Use null for any values that cannot be determined.
@@ -170,47 +199,6 @@ const buildAuctionInteractionData = async (
   });
   return content.object as any;
 };
-
-interface NftFixPriceSaleV4DR1Data {
-  isComplete: boolean;
-  marketplaceAddress: Address;
-  nftOwnerAddress: Address;
-  fullTonPrice: bigint;
-  soldAtTime: number;
-  soldQueryId: bigint;
-  marketplaceFeeAddress: Address;
-  royaltyAddress: Address;
-  marketplaceFeePercent: number;
-  royaltyPercent: number;
-  nftAddress: Address;
-  createdAt: number;
-}
-
-function assertPercent(value: number): number {
-  if (value < 0 || value > 100) throw new Error('Invalid percent value');
-  return Math.floor(value * 1000);
-}
-
-function buildNftFixPriceSaleV4R1Data(cfg: NftFixPriceSaleV4DR1Data & {publicKey: Buffer | null}) {
-  return beginCell()
-    .storeBit(cfg.isComplete)
-    .storeAddress(cfg.marketplaceAddress)
-    .storeAddress(cfg.nftOwnerAddress)
-    .storeCoins(cfg.fullTonPrice)
-    .storeUint(cfg.soldAtTime, 32)
-    .storeUint(cfg.soldQueryId, 64)
-    .storeRef(beginCell()
-      .storeAddress(cfg.marketplaceFeeAddress)
-      .storeAddress(cfg.royaltyAddress)
-      .storeUint(assertPercent(cfg.marketplaceFeePercent), 17)
-      .storeUint(assertPercent(cfg.royaltyPercent), 17)
-      .storeAddress(cfg.nftAddress)
-      .storeUint(cfg.createdAt, 32)
-      .endCell())
-    .storeDict(undefined) // empty jetton dict
-    .storeMaybeBuffer(cfg.publicKey, 256 / 8)
-    .endCell();
-}
 
 /**
  * AuctionInteractionAction encapsulates the core logic to interact with an auction contract.
@@ -308,20 +296,21 @@ export class AuctionInteractionAction {
       to: auctionAddr,
       value: toNano(bidAmount),
       bounce: true,
-      body: ""
+      body: "",
     });
 
-    const contract = this.walletProvider.getWalletClient().open(this.walletProvider.wallet);
+    const contract = this.walletProvider
+      .getWalletClient()
+      .open(this.walletProvider.wallet);
 
     const seqno = await contract.getSeqno();
     // Send message using the TON client.
     const transfer = await contract.createTransfer({
-            seqno,
-            secretKey: this.walletProvider.keypair.secretKey,
-            messages: [bidMessage],
-            sendMode: SendMode.IGNORE_ERRORS + SendMode.PAY_GAS_SEPARATELY,
-        }
-    );
+      seqno,
+      secretKey: this.walletProvider.keypair.secretKey,
+      messages: [bidMessage],
+      sendMode: SendMode.IGNORE_ERRORS + SendMode.PAY_GAS_SEPARATELY,
+    });
 
     await contract.send(transfer);
     await waitSeqnoContract(seqno, contract);
@@ -339,23 +328,26 @@ export class AuctionInteractionAction {
   async stop(auctionAddress: string): Promise<any> {
     const client = this.walletProvider.getWalletClient();
     const contract = client.open(this.walletProvider.wallet);
-    
+
     const seqno = await contract.getSeqno();
 
     const auctionAddr = Address.parse(auctionAddress);
     // based on https://github.com/getgems-io/nft-contracts/blob/7654183fea73422808281c8336649b49ce9939a2/packages/contracts/nft-auction-v2/NftAuctionV2.data.ts#L86
-    const stopBody = new Builder().storeUint(0, 32).storeBuffer(Buffer.from('stop')).endCell();
+    const stopBody = new Builder()
+      .storeUint(0, 32)
+      .storeBuffer(Buffer.from("stop"))
+      .endCell();
     const stopMessage = internal({
       to: auctionAddr,
       value: toNano("0.05"),
       bounce: true,
-      body: stopBody
+      body: stopBody,
     });
     const transfer = await contract.createTransfer({
-        seqno,
-        secretKey: this.walletProvider.keypair.secretKey,
-        messages: [stopMessage],
-        sendMode: SendMode.IGNORE_ERRORS + SendMode.PAY_GAS_SEPARATELY,
+      seqno,
+      secretKey: this.walletProvider.keypair.secretKey,
+      messages: [stopMessage],
+      sendMode: SendMode.IGNORE_ERRORS + SendMode.PAY_GAS_SEPARATELY,
     });
     await contract.send(transfer);
     await waitSeqnoContract(seqno, contract);
@@ -371,22 +363,25 @@ export class AuctionInteractionAction {
   async cancel(auctionAddress: string): Promise<any> {
     const client = this.walletProvider.getWalletClient();
     const contract = client.open(this.walletProvider.wallet);
-    
+
     const auctionAddr = Address.parse(auctionAddress);
     // based on https://github.com/getgems-io/nft-contracts/blob/7654183fea73422808281c8336649b49ce9939a2/packages/contracts/nft-auction-v2/NftAuctionV2.data.ts#L90
-    const cancelBody = new Builder().storeUint(0, 32).storeBuffer(Buffer.from('cancel')).endCell();
+    const cancelBody = new Builder()
+      .storeUint(0, 32)
+      .storeBuffer(Buffer.from("cancel"))
+      .endCell();
     const seqno = await contract.getSeqno();
     const cancelMessage = internal({
       to: auctionAddr,
       value: toNano("0.05"),
       bounce: true,
-      body: cancelBody
+      body: cancelBody,
     });
     const transfer = await contract.createTransfer({
-        seqno,
-        secretKey: this.walletProvider.keypair.secretKey,
-        messages: [cancelMessage],
-        sendMode: SendMode.IGNORE_ERRORS + SendMode.PAY_GAS_SEPARATELY,
+      seqno,
+      secretKey: this.walletProvider.keypair.secretKey,
+      messages: [cancelMessage],
+      sendMode: SendMode.IGNORE_ERRORS + SendMode.PAY_GAS_SEPARATELY,
     });
     await contract.send(transfer);
     await waitSeqnoContract(seqno, contract);
@@ -402,43 +397,58 @@ export class AuctionInteractionAction {
   async list(params: AuctionInteractionContent): Promise<any> {
     const client = this.walletProvider.getWalletClient();
     const contract = client.open(this.walletProvider.wallet);
-    
+
     const auctionAddr = Address.parse(params.auctionAddress);
-    
+
+    //const saleData = {
+    //  isComplete: false,
+    //  marketplaceAddress: Address.parse(params.marketplaceAddress!),
+    //  nftOwnerAddress: this.walletProvider.wallet.address,
+    //  fullTonPrice: toNano(params.fullPrice!),
+    //  soldAtTime: 0,
+    //  soldQueryId: 0n,
+    //  marketplaceFeeAddress: Address.parse(params.marketplaceFeeAddress!),
+    //  royaltyAddress: Address.parse(params.royaltyAddress!),
+    //  marketplaceFeePercent: params.marketplaceFeePercent!,
+    //  royaltyPercent: params.royaltyPercent!,
+    //  nftAddress: Address.parse(params.nftAddress!),
+    //  createdAt: Math.floor(Date.now() / 1000),
+    //  publicKey: null,
+    //};
+
+    const fullPrice = toNano(params.fullPrice!);
+    const royalty = 5;
+    const fee = 5;
+
     const saleData = {
-      isComplete: false,
-      marketplaceAddress: Address.parse(params.marketplaceAddress!),
+      nftAddress: Address.parse(params.nftAddress),
       nftOwnerAddress: this.walletProvider.wallet.address,
-      fullTonPrice: toNano(params.fullPrice!),
-      soldAtTime: 0,
-      soldQueryId: 0n,
-      marketplaceFeeAddress: Address.parse(params.marketplaceFeeAddress!),
-      royaltyAddress: Address.parse(params.royaltyAddress!),
-      marketplaceFeePercent: params.marketplaceFeePercent!,
-      royaltyPercent: params.royaltyPercent!,
-      nftAddress: Address.parse(params.nftAddress!),
-      createdAt: Math.floor(Date.now() / 1000),
-      publicKey: null
+      deployerAddress: destinationAddress,
+      marketplaceAddress: marketplaceAddress,
+      marketplaceFeeAddress: marketplaceFeeAddress,
+      marketplaceFeePercent: (fullPrice / BigInt(100)) * BigInt(fee),
+      royaltyAddress: this.walletProvider.wallet.address,
+      royaltyPercent: (fullPrice / BigInt(100)) * BigInt(royalty),
+      fullTonPrice: fullPrice,
     };
 
-    const saleBody = buildNftFixPriceSaleV4R1Data(saleData);
-    
+    const saleBody = await buildNftFixPriceSaleV3R3Data(saleData); //buildNftFixPriceSaleV4R1Data(saleData);
+
     const seqno = await contract.getSeqno();
     const listMessage = internal({
-      to: auctionAddr,
-      value: toNano("0.05"),
+      to: params.nftAddress,
+      value: toNano("0.3"), // Sufficient value for all operations
       bounce: true,
       body: saleBody
     });
 
-    const transfer = await contract.createTransfer({
+    const transfer = await contract.sendTransfer({
       seqno,
       secretKey: this.walletProvider.keypair.secretKey,
       messages: [listMessage],
       sendMode: SendMode.IGNORE_ERRORS + SendMode.PAY_GAS_SEPARATELY,
     });
 
-    await contract.send(transfer);
     await waitSeqnoContract(seqno, contract);
 
     return {
@@ -455,19 +465,19 @@ export class AuctionInteractionAction {
   async buy(auctionAddress: string): Promise<any> {
     const client = this.walletProvider.getWalletClient();
     const contract = client.open(this.walletProvider.wallet);
-    
+
     const addr = Address.parse(auctionAddress);
     const result = await client.runMethod(addr, "get_fix_price_data_v4");
-    
+
     const fullPrice = result.stack.readNumber();
     const minGasAmount = toNano("0.1"); // 0.1 TON as specified in contract
-    
+
     const seqno = await contract.getSeqno();
     const buyMessage = internal({
       to: addr,
       value: BigInt(fullPrice) + minGasAmount,
       bounce: true,
-      body: new Builder().storeUint(OP_CODES.FIX_PRICE_BUY, 32).endCell()
+      body: new Builder().storeUint(OP_CODES.FIX_PRICE_BUY, 32).endCell(),
     });
 
     const transfer = await contract.createTransfer({
@@ -493,10 +503,10 @@ export class AuctionInteractionAction {
   async changePrice(auctionAddress: string, newPrice: string): Promise<any> {
     const client = this.walletProvider.getWalletClient();
     const contract = client.open(this.walletProvider.wallet);
-    
+
     const addr = Address.parse(auctionAddress);
     const seqno = await contract.getSeqno();
-    
+
     const changePriceMessage = internal({
       to: addr,
       value: toNano("0.05"),
@@ -505,7 +515,7 @@ export class AuctionInteractionAction {
         .storeUint(OP_CODES.FIX_PRICE_CHANGE_PRICE, 32)
         .storeCoins(toNano(newPrice))
         .storeDict(undefined)
-        .endCell()
+        .endCell(),
     });
 
     const transfer = await contract.createTransfer({
@@ -528,18 +538,21 @@ export class AuctionInteractionAction {
   /**
    * Adds value to an existing offer
    */
-  async addValue(auctionAddress: string, additionalValue: string): Promise<any> {
+  async addValue(
+    auctionAddress: string,
+    additionalValue: string
+  ): Promise<any> {
     const client = this.walletProvider.getWalletClient();
     const contract = client.open(this.walletProvider.wallet);
-    
+
     const addr = Address.parse(auctionAddress);
     const seqno = await contract.getSeqno();
-    
+
     const addValueMessage = internal({
       to: addr,
       value: toNano(additionalValue),
       bounce: true,
-      body: new Builder().storeUint(0, 32).endCell() // op = 0 for adding value
+      body: new Builder().storeUint(0, 32).endCell(), // op = 0 for adding value
     });
 
     const transfer = await contract.createTransfer({
@@ -565,15 +578,15 @@ export class AuctionInteractionAction {
   async cancelOffer(auctionAddress: string): Promise<any> {
     const client = this.walletProvider.getWalletClient();
     const contract = client.open(this.walletProvider.wallet);
-    
+
     const addr = Address.parse(auctionAddress);
     const seqno = await contract.getSeqno();
-    
+
     const cancelMessage = internal({
       to: addr,
       value: toNano("0.05"),
       bounce: true,
-      body: new Builder().storeUint(OP_CODES.OFFER_CANCEL, 32).endCell()
+      body: new Builder().storeUint(OP_CODES.OFFER_CANCEL, 32).endCell(),
     });
 
     const transfer = await contract.createTransfer({
@@ -599,7 +612,7 @@ export class AuctionInteractionAction {
     const client = this.walletProvider.getWalletClient();
     const addr = Address.parse(auctionAddress);
     const result = await client.runMethod(addr, "get_offer_data_v2");
-    
+
     // Read values individually from stack
     const magic = result.stack.readNumber();
     const isComplete = result.stack.readNumber();
@@ -650,13 +663,13 @@ export default {
     message: Memory,
     state: State,
     options: any,
-    callback?: HandlerCallback,
+    callback?: HandlerCallback
   ) => {
     elizaLogger.log("Starting INTERACT_AUCTION handler...");
     const params = await buildAuctionInteractionData(runtime, message, state);
 
-    if(!isAuctionInteractionContent(params)) {
-      if(callback) {
+    if (!isAuctionInteractionContent(params)) {
+      if (callback) {
         callback({
           text: "Unable to process auction interaction request. Invalid content provided.",
           content: { error: "Invalid get auction interaction content" },
@@ -666,7 +679,6 @@ export default {
     }
 
     try {
-
       const walletProvider = await initWalletProvider(runtime);
       const auctionAction = new AuctionInteractionAction(walletProvider);
       let result: any;
@@ -681,14 +693,10 @@ export default {
           );
           break;
         case "stop":
-          result = await auctionAction.stop(
-            params.auctionAddress
-          );
+          result = await auctionAction.stop(params.auctionAddress);
           break;
         case "cancel":
-          result = await auctionAction.cancel(
-            params.auctionAddress
-          );
+          result = await auctionAction.cancel(params.auctionAddress);
           break;
         case "list":
           result = await auctionAction.list(params);
@@ -697,10 +705,16 @@ export default {
           result = await auctionAction.buy(params.auctionAddress);
           break;
         case "changePrice":
-          result = await auctionAction.changePrice(params.auctionAddress, params.newPrice!);
+          result = await auctionAction.changePrice(
+            params.auctionAddress,
+            params.newPrice!
+          );
           break;
         case "addValue":
-          result = await auctionAction.addValue(params.auctionAddress, params.additionalValue!);
+          result = await auctionAction.addValue(
+            params.auctionAddress,
+            params.additionalValue!
+          );
           break;
         case "cancelOffer":
           result = await auctionAction.cancelOffer(params.auctionAddress);
@@ -729,7 +743,7 @@ export default {
     return true;
   },
   template: auctionInteractionTemplate,
-    // eslint-disable-next-line
+  // eslint-disable-next-line
   validate: async (_runtime: IAgentRuntime) => {
     return true;
   },
@@ -908,4 +922,4 @@ export default {
       },
     ],
   ],
-}; 
+};
