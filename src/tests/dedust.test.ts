@@ -25,8 +25,6 @@ describe("DEX: DeDust", () => {
   });
 
   describe("Create Pool", () => {
-    it("should get vault", async () => {});
-
     it("should get pool", async () => {
       const scale = new JettonMaster(Address.parse(SCALE_ADDR));
       const usdt = new JettonMaster(
@@ -52,19 +50,18 @@ describe("DEX: DeDust", () => {
       );
     });
 
-    it("should create pool", async () => {
+    // NOTE DeDust factory only deployed on mainnet, skipping tests for now
+    // Reference: https://docs.dedust.io/docs/getting-started & https://github.com/dedust-io/sdk/issues/4
+    it.skip("should create pool", async () => {
       const build = new JettonMaster(
         Address.parse("EQBYnUrIlwBrWqp_rl-VxeSBvTR2VmTfC4ManQ657n_BUILD")
       );
       const pavul = new JettonMaster(
         Address.parse("EQChXgdfER2nuLvZP5EiSlCf95oXZ5KDiCEmGBBv_WcNdxz3")
       );
+      // TODO Try testnet or mock locally
       const result = await dedustClient.createPool([build, pavul]);
       expect(result).toEqual(true);
     });
   });
-
-  //   describe("Add liquidity", () => {});
-  //   describe("Withdraw liquidity", () => {});
-  //   describe("Claim Fee", () => {});
 });
