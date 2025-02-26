@@ -75,16 +75,13 @@ export async function buildNftFixPriceSaleV3R3Data(
     Buffer.from(NftFixPriceSaleV3R3CodeBoc, "base64")
   )[0];
 
-  //const nftAddress = Address.parse('EQCUWoe7hLlklVxH8gduCf45vPNocsjRP4wbX42UJ0Ja0S2f');
-  const price = toNano("5"); // 5 TON
-
   const feesData = beginCell()
     .storeAddress(cfg.marketplaceFeeAddress)
     // 5% - GetGems fee
-    .storeCoins((price / BigInt(100)) * BigInt(5))
+    .storeCoins((cfg.fullTonPrice / BigInt(100)) * BigInt(5))
     .storeAddress(cfg.royaltyAddress)
     // 5% - Royalty, can be changed
-    .storeCoins((price / BigInt(100)) * BigInt(0))
+    .storeCoins((cfg.fullTonPrice / BigInt(100)) * BigInt(0))
     .endCell();
 
   const saleData = beginCell()
@@ -93,7 +90,7 @@ export async function buildNftFixPriceSaleV3R3Data(
     .storeAddress(cfg.marketplaceAddress) // marketplace_address
     .storeAddress(cfg.nftAddress) // nft_address
     .storeAddress(cfg.nftOwnerAddress) // previous_owner_address
-    .storeCoins(price) // full price in nanotons
+    .storeCoins(cfg.fullTonPrice) // full price in nanotons
     .storeRef(feesData) // fees_cell
     .storeUint(0, 32) // sold_at
     .storeUint(0, 64) // query_id
