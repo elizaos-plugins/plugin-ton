@@ -9,6 +9,7 @@ import batchTransferAction from "./actions/batchTransfer.ts";
 import auctionAction from "./actions/auctionInteraction.ts";
 import createListingAction from "./actions/createListing.ts";
 import buyListingAction from "./actions/buyListing.ts";
+import cancelListingAction from "./actions/cancelListing.ts";
 import { WalletProvider, nativeWalletProvider } from "./providers/wallet.ts";
 import tokenPriceAction from "./actions/tokenPrice.ts";
 import { tonTokenPriceProvider } from "./providers/tokenProvider.ts";
@@ -58,9 +59,15 @@ export const tonPlugin: Plugin = {
     auctionAction as Action,
     createListingAction as Action,
     buyListingAction as Action,
+    cancelListingAction as Action,
   ],
   evaluators: [],
-  providers: [nativeWalletProvider, nativeStakingProvider, tonConnectProvider,tonTokenPriceProvider],
+  providers: [
+    nativeWalletProvider,
+    nativeStakingProvider,
+    tonConnectProvider,
+    tonTokenPriceProvider,
+  ],
 };
 
 export default tonPlugin;
