@@ -27,6 +27,8 @@ This plugin provides functionality to:
 ![alt text](./screenshot/status.png "TonConnect Status")
 ![alt text](./screenshot/disconnect.png "Disconnect")
 
+![lending](./screenshot/lending_info.png "Get lending info for TON")
+
 ### Quick Start
 
 ```bash

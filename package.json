@@ -1,61 +1,47 @@
 {
-    "name": "@elizaos-plugins/plugin-ton",
-    "version": "0.1.9",
-    "type": "module",
-    "main": "dist/index.js",
-    "module": "dist/index.js",
-    "types": "dist/index.d.ts",
-    "exports": {
-        "./package.json": "./package.json",
-        ".": {
-            "import": {
-                "@elizaos/source": "./src/index.ts",
-                "types": "./dist/index.d.ts",
-                "default": "./dist/index.js"
-            }
-        }
-    },
-    "files": [
-        "dist"
-    ],
-    "dependencies": {
-        "@ton/crypto": "3.3.0",
-        "@ton/ton": "15.1.0",
-        "bignumber.js": "9.1.2",
-        "node-cache": "5.1.2",
-        "@tonconnect/sdk": "3.0.6",
-        "qrcode": "1.5.4",
-        "tsup": "8.3.5"
-    },
-    "devDependencies": {
-        "@biomejs/biome": "1.5.3",
-        "tsup": "^8.3.5"
-    },
-    "scripts": {
-        "build": "tsup --format esm --dts",
-        "dev": "tsup --format esm --dts --watch",
-        "test": "vitest run",
-        "mnemonic": "tsup --format esm ./scripts/generate-ton-mnemonic.ts && node ./dist/generate-ton-mnemonic.js",
-        "lint": "biome check src/",
-        "lint:fix": "biome check --apply src/",
-        "format": "biome format src/",
-        "format:fix": "biome format --write src/"
-    },
-    "peerDependencies": {
-        "whatwg-url": "7.1.0"
-    },
-    "agentConfig": {
-        "pluginType": "elizaos:client:1.0.0",
-        "pluginParameters": {
-            "TON_PRIVATE_KEY": {
-                "type": "string",
-                "minLength": 1,
-                "description": "Ton private key is required"
-            },
-            "TON_RPC_URL": {
-                "type": "string",
-                "description": "TON network RPC endpoint URL"
-            }
-        }
-    }
+	"name": "@elizaos/plugin-ton",
+	"version": "0.1.9",
+	"type": "module",
+	"main": "dist/index.js",
+	"module": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		"./package.json": "./package.json",
+		".": {
+			"import": {
+				"@elizaos/source": "./src/index.ts",
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			}
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"dependencies": {
+		"@elizaos/core": "workspace:*",
+		"@evaafi/sdk": "latest",
+		"@ton/crypto": "3.3.0",
+		"@ton/ton": "15.1.0",
+		"bignumber.js": "9.1.2",
+		"node-cache": "5.1.2",
+		"tsup": "8.3.5"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "1.5.3",
+		"tsup": "^8.3.5"
+	},
+	"scripts": {
+		"build": "tsup --format esm --dts",
+		"dev": "tsup --format esm --dts --watch",
+		"test": "vitest run",
+		"mnemonic": "tsup --format esm ./scripts/generate-ton-mnemonic.ts && node ./dist/generate-ton-mnemonic.js",
+		"lint": "biome check src/",
+		"lint:fix": "biome check --apply src/",
+		"format": "biome format src/",
+		"format:fix": "biome format --write src/"
+	},
+	"peerDependencies": {
+		"whatwg-url": "7.1.0"
+	}
 }
