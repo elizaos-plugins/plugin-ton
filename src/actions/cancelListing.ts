@@ -20,6 +20,7 @@ import {
 import { z } from "zod";
 import { initWalletProvider, WalletProvider } from "../providers/wallet";
 import { waitSeqnoContract } from "../utils/util";
+import { getListingData } from "../utils/NFTAuction";
 
 /**
  * Schema for cancel listing input.
@@ -88,71 +89,13 @@ export class CancelListingAction {
   }
 
   /**
-   * Gets the owner of an NFT (which is the listing address if it's listed)
-   */
-  async getNftOwner(nftAddress: string): Promise<Address> {
-    try {
-      const client = this.walletProvider.getWalletClient();
-      const result = await client.runMethod(
-        Address.parse(nftAddress),
-        "get_nft_data"
-      );
-
-      result.stack.skip(3);
-      const owner = result.stack.readAddress() as Address;
-
-      // Create a clean operational address
-      const rawString = owner.toRawString();
-      const operationalAddress = Address.parseRaw(rawString);
-
-      elizaLogger.log(`NFT owner address: ${operationalAddress.toString()}`);
-      return operationalAddress;
-    } catch (error) {
-      elizaLogger.error(`Error getting NFT owner for ${nftAddress}: ${error}`);
-      throw new Error(`Failed to get NFT owner: ${error.message}`);
-    }
-  }
-
-  /**
-   * Gets data about the NFT listing
-   */
-  async getListingData(nftAddress: string): Promise<{
-    listingAddress: Address;
-    owner: Address;
-    fullPrice: bigint;
-  }> {
-    try {
-      const listingAddress = await this.getNftOwner(nftAddress);
-
-      const client = this.walletProvider.getWalletClient();
-      const result = await client.runMethod(listingAddress, "get_sale_data");
-
-      result.stack.skip(5);
-
-      const owner = result.stack.readAddress() as Address;
-      const fullPrice = result.stack.readBigNumber();
-
-      return {
-        listingAddress,
-        owner,
-        fullPrice,
-      };
-    } catch (error) {
-      elizaLogger.error(
-        `Error getting listing data for ${nftAddress}: ${error}`
-      );
-      throw new Error(`Failed to get listing data: ${error.message}`);
-    }
-  }
-
-  /**
    * Cancels an NFT listing
    */
   async cancel(nftAddress: string): Promise<any> {
     try {
       elizaLogger.log(`Starting cancellation of NFT listing: ${nftAddress}`);
 
-      const listingData = await this.getListingData(nftAddress);
+      const listingData = await getListingData(this.walletProvider, nftAddress);
 
       const msgBody = beginCell().storeUint(3, 32).storeUint(0, 64).endCell(); // queryId = 0
 

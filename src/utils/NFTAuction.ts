@@ -6,6 +6,8 @@ import {
   storeStateInit,
   toNano,
 } from "@ton/core";
+import { WalletProvider } from "../providers/wallet";
+import { getNftOwner } from "./NFTItem";
 
 export interface NftFixPriceSaleV4DR1Data {
   isComplete: boolean;
@@ -140,7 +142,9 @@ export async function buildNftFixPriceSaleV3R3DeploymentBody(
   return transferNftBody;
 }
 
-export async function buildNftAuctionV3R3DeploymentBody(cfg: NftAuctionV3R3Data) {
+export async function buildNftAuctionV3R3DeploymentBody(
+  cfg: NftAuctionV3R3Data
+) {
   // func:0.4.4 src:op-codes.fc, imports/stdlib.fc, nft-fixprice-sale-v3r3.fc
   // If GetGems updates its sale smart contract, you will need to obtain the new smart contract from https://github.com/getgems-io/nft-contracts/blob/main/packages/contracts/nft-fixprice-sale-v3/NftFixpriceSaleV3.source.ts.
   const NftAuctionV3R3CodeBoc =
@@ -218,6 +222,32 @@ export async function buildNftAuctionV3R3DeploymentBody(cfg: NftAuctionV3R3Data)
     .endCell();
 
   return transferNftBody;
+}
+
+export async function getListingData(walletProvider: WalletProvider, nftAddress: string): Promise<{
+  listingAddress: Address;
+  owner: Address;
+  fullPrice: bigint;
+}> {
+  try {
+    const listingAddress = await getNftOwner(walletProvider, nftAddress);
+
+    const client = walletProvider.getWalletClient();
+    const result = await client.runMethod(listingAddress, "get_sale_data");
+
+    result.stack.skip(5);
+
+    const owner = result.stack.readAddress() as Address;
+    const fullPrice = result.stack.readBigNumber();
+
+    return {
+      listingAddress,
+      owner,
+      fullPrice,
+    };
+  } catch (error) {
+    throw new Error(`Failed to get listing data: ${error.message}`);
+  }
 }
 
 export const marketplaceAddress = Address.parse(
