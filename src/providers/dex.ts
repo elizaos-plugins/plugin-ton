@@ -1,4 +1,10 @@
-import { IAgentRuntime, elizaLogger } from "@elizaos/core";
+import {
+  IAgentRuntime,
+  Provider,
+  Memory,
+  State,
+  elizaLogger,
+} from "@elizaos/core";
 import { WalletProvider } from "..";
 import {
   Dedust,
@@ -10,28 +16,27 @@ import {
   type TransactionHash,
   isPoolSupported,
   SUPPORTED_DEXES,
-  Tonco,
   SupportedMethod,
 } from "./dexes";
+import { initWalletProvider } from "./wallet";
 
 export class DexProvider implements DexProvider {
-  megaDex: [(typeof SUPPORTED_DEXES)[number], DEX];
+  megaDex = [];
   // activePools: ...
 
   constructor(walletProvider: WalletProvider, runtime: IAgentRuntime) {
-    this.megaDex["TORCH_FINANCE"] = new TorchFinance(walletProvider, runtime);
+    this.megaDex["TORCH_FINANCE"] = new TorchFinance(walletProvider);
     this.megaDex["DEDUST"] = new Dedust();
     this.megaDex["STON_FI"] = new StonFi(walletProvider);
-    this.megaDex["TONCO"] = new Tonco();
   }
 
   getAllDexesAndSupportedMethods() {
-    return this.megaDex.map((dex, index) => {
+    return Object.keys(this.megaDex).map((index) => {
       return {
-        dex,
-        supportedMethods: (dex as DEX).supportMethods
-      }
-    })
+        dex: index,
+        supportedMethods: this.megaDex[index].supportMethods,
+      };
+    });
   }
 
   async createPool(params: {
@@ -90,14 +95,14 @@ export class DexProvider implements DexProvider {
   async withdrawLiquidity(params: {
     dex: (typeof SUPPORTED_DEXES)[number];
     isTon: boolean;
-    tonAmount?: string;
+    amount?: string;
     jettonWithdrawals: JettonWithdrawal[];
   }) {
-    const { isTon, tonAmount, dex } = params;
+    const { isTon, amount, dex } = params;
     if (!this.isOperationSupported(dex, SupportedMethod.WITHDRAW)) {
       throw new Error(`Withdrawal is not suppoted for ${dex}`);
     }
-    if (!isTon && tonAmount) {
+    if (!isTon && amount) {
       throw new Error("Wrong input");
     }
 
@@ -114,8 +119,8 @@ export class DexProvider implements DexProvider {
 
   async claimFees(params: {
     dex: (typeof SUPPORTED_DEXES)[number];
-    jettonAddress: string;
-    feeClaimAmount: string;
+    pool: string;
+    feeClaimAmount: number;
   }): Promise<void> {
     const { dex } = params;
     if (!this.isOperationSupported(dex, SupportedMethod.CLAIM_FEE)) {
@@ -129,4 +134,30 @@ export const initProvider = async (
   runtime: IAgentRuntime
 ): Promise<DexProvider> => {
   return new DexProvider(walletProvider, runtime);
+};
+
+export const dexProvider: Provider = {
+  async get(
+    runtime: IAgentRuntime,
+    // eslint-disable-next-line
+    _message: Memory,
+    // eslint-disable-next-line
+    _state?: State
+  ): Promise<string | null> {
+    try {
+      const walletProvider = await initWalletProvider(runtime);
+      const dexProvider = await initProvider(walletProvider, runtime);
+      const formattedPortfolio =
+        await dexProvider.getAllDexesAndSupportedMethods();
+      console.log(formattedPortfolio);
+      let readable = 'Available DEXes and supported methods: \n';
+      formattedPortfolio.forEach(dex => {
+        readable += `${dex.dex}: ${dex.supportedMethods.map(method => `${method} `)}`;
+      })
+      return readable;
+    } catch (error) {
+      console.error(`Error in  DEX provider:`, error);
+      return null;
+    }
+  },
 };
