@@ -14,7 +14,7 @@ import { Builder } from "@ton/core";
 import { z } from "zod";
 import { initWalletProvider, WalletProvider } from "../providers/wallet";
 import { waitSeqnoContract } from "../utils/util";
-import { buildNftFixPriceSaleV3R3Data, destinationAddress, marketplaceAddress, marketplaceFeeAddress } from "../utils/NFTAuction";
+import { buildNftFixPriceSaleV3R3DeploymentBody, destinationAddress, marketplaceAddress, marketplaceFeeAddress } from "../utils/NFTAuction";
 
 /**
  * Schema for auction interaction input.
@@ -432,7 +432,7 @@ export class AuctionInteractionAction {
       fullTonPrice: fullPrice,
     };
 
-    const saleBody = await buildNftFixPriceSaleV3R3Data(saleData); //buildNftFixPriceSaleV4R1Data(saleData);
+    const saleBody = await buildNftFixPriceSaleV3R3DeploymentBody(saleData); //buildNftFixPriceSaleV4R1Data(saleData);
 
     const seqno = await contract.getSeqno();
     const listMessage = internal({

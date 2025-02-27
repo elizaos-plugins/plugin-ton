@@ -14,7 +14,7 @@ import {
   import { initWalletProvider, WalletProvider } from "../providers/wallet";
   import { waitSeqnoContract } from "../utils/util";
   import {
-    buildNftAuctionV3R3Data,  // This function would need to be implemented in the utils
+    buildNftAuctionV3R3DeploymentBody,  // This function would need to be implemented in the utils
     destinationAddress,
     marketplaceAddress,
     marketplaceFeeAddress,
@@ -136,7 +136,7 @@ import {
         expiryTime: expiryTime,
       };
   
-      const auctionBody = await buildNftAuctionV3R3Data(auctionData);
+      const auctionBody = await buildNftAuctionV3R3DeploymentBody(auctionData);
   
       const seqno = await contract.getSeqno();
       const auctionMessage = internal({

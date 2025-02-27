@@ -53,7 +53,7 @@ function assertPercent(value: number): number {
   return Math.floor(value * 1000);
 }
 
-export function buildNftFixPriceSaleV4R1Data(
+export function buildNftFixPriceSaleV4R1DeploymentBody(
   cfg: NftFixPriceSaleV4DR1Data & { publicKey: Buffer | null }
 ) {
   return beginCell()
@@ -78,7 +78,7 @@ export function buildNftFixPriceSaleV4R1Data(
     .endCell();
 }
 
-export async function buildNftFixPriceSaleV3R3Data(
+export async function buildNftFixPriceSaleV3R3DeploymentBody(
   cfg: NftFixPriceSaleV3R3Data
 ) {
   // func:0.4.4 src:op-codes.fc, imports/stdlib.fc, nft-fixprice-sale-v3r3.fc
@@ -140,7 +140,7 @@ export async function buildNftFixPriceSaleV3R3Data(
   return transferNftBody;
 }
 
-export async function buildNftAuctionV3R3Data(cfg: NftAuctionV3R3Data) {
+export async function buildNftAuctionV3R3DeploymentBody(cfg: NftAuctionV3R3Data) {
   // func:0.4.4 src:op-codes.fc, imports/stdlib.fc, nft-fixprice-sale-v3r3.fc
   // If GetGems updates its sale smart contract, you will need to obtain the new smart contract from https://github.com/getgems-io/nft-contracts/blob/main/packages/contracts/nft-fixprice-sale-v3/NftFixpriceSaleV3.source.ts.
   const NftAuctionV3R3CodeBoc =
@@ -155,7 +155,7 @@ export async function buildNftAuctionV3R3Data(cfg: NftAuctionV3R3Data) {
   const minPercentStep = 5;
   const stepTimeSeconds = 60 * 60 * 24;
 
-  const createdAt = Math.round(Date.now() / 1000)
+  const createdAt = Math.round(Date.now() / 1000);
 
   const constantData = beginCell()
     .storeAddress(cfg.marketplaceAddress)

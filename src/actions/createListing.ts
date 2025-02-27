@@ -14,7 +14,7 @@ import { z } from "zod";
 import { initWalletProvider, WalletProvider } from "../providers/wallet";
 import { waitSeqnoContract } from "../utils/util";
 import {
-  buildNftFixPriceSaleV3R3Data,
+  buildNftFixPriceSaleV3R3DeploymentBody,
   destinationAddress,
   marketplaceAddress,
   marketplaceFeeAddress,
@@ -122,7 +122,7 @@ export class CreateListingAction {
       fullTonPrice: fullPrice,
     };
 
-    const saleBody = await buildNftFixPriceSaleV3R3Data(saleData);
+    const saleBody = await buildNftFixPriceSaleV3R3DeploymentBody(saleData);
 
     const seqno = await contract.getSeqno();
     const listMessage = internal({
