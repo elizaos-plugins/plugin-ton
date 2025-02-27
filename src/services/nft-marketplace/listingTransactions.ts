@@ -98,13 +98,10 @@ export async function cancelListing(
   }
 }
 
-/**
- * Place a bid on an auction
- */
 export async function bidOnAuction(
   walletProvider: WalletProvider,
   nftAddress: string,
-  bidAmount?: bigint
+  bidAmount: bigint
 ): Promise<any> {
   try {
     const listingData = await getListingData(walletProvider, nftAddress);
@@ -120,7 +117,7 @@ export async function bidOnAuction(
     }
     
     // If no bidAmount provided, get the next valid bid amount
-    const bid = bidAmount || await getNextValidBidAmount(walletProvider, nftAddress);
+    const bid = bidAmount;
     
     // Check if bid is valid
     const minBid = await getMinBid(walletProvider, nftAddress);
@@ -129,7 +126,7 @@ export async function bidOnAuction(
     }
 
     // Gas amount for the transaction
-    const gasAmount = toNano("1");
+    const gasAmount = toNano("0.1");
     const amountToSend = bid + gasAmount;
 
     // Send the bid transaction
@@ -138,14 +135,11 @@ export async function bidOnAuction(
 
     const seqno = await contract.getSeqno();
     
-    // Op code for placing bid is typically 2
-    const bidMessage = beginCell().storeUint(2, 32).storeUint(0, 64).endCell();
-    
     const transferMessage = internal({
       to: listingData.listingAddress,
       value: amountToSend,
       bounce: true,
-      body: bidMessage,
+      body: "",
     });
 
     await contract.sendTransfer({

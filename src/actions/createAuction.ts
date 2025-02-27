@@ -76,7 +76,7 @@ import {
   \`\`\`
   
   {{recentMessages}}
-  
+  If a parameter is missing, respond with a question asking specifically for that parameter.
   Respond with a JSON markdown block containing only the extracted values.`;
   
   /**
@@ -115,6 +115,8 @@ import {
     async createAuction(params: CreateAuctionContent): Promise<any> {
       const client = this.walletProvider.getWalletClient();
       const contract = client.open(this.walletProvider.wallet);
+
+      elizaLogger.info("Creating auction with params: ", params);
   
       const minimumBid = toNano(params.minimumBid);
       const maximumBid = toNano(params.maximumBid);
@@ -135,6 +137,8 @@ import {
         maximumBid: maximumBid,
         expiryTime: expiryTime,
       };
+
+      elizaLogger.info("Minbid: ", minimumBid);
   
       const auctionBody = await buildNftAuctionV3R3DeploymentBody(auctionData);
   
