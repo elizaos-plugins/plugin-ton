@@ -4,27 +4,45 @@ import {
   Token,
   JettonWithdrawal,
   SupportedMethod,
-} from "./dex";
+} from ".";
 import {
   TorchSDK,
   generateQueryId,
   DepositParams,
   toUnit,
   WithdrawParams,
+  TorchSDKOptions,
 } from "@torch-finance/sdk";
 import { Asset } from "@torch-finance/core";
 import {
+  Address,
   internal,
   OpenedContract,
   SenderArguments,
   SendMode,
+  TonClient4,
   WalletContractV5R1,
 } from "@ton/ton";
 import { IAgentRuntime } from "@elizaos/core";
 import { CONFIG_KEYS } from "../../enviroment";
 import { KeyPair, mnemonicToWalletKey } from "@ton/crypto";
 
-const sdk = new TorchSDK();
+const tonClient = new TonClient4({
+  endpoint: "https://testnet-v4.tonhubapi.com/",
+});
+const factoryAddress = Address.parse(
+  "kQAEQ_tRYl3_EJXBTGIKaao0AVZ00OOYOnabhR1aEVXfSjrQ"
+);
+const testnetOracle = "https://testnet-oracle.torch.finance";
+const testnetAPI = "https://testnet-api.torch.finance";
+const config: TorchSDKOptions = {
+  tonClient: tonClient,
+  factoryAddress: factoryAddress,
+  oracleEndpoint: testnetOracle,
+  apiEndpoint: testnetAPI,
+};
+
+const sdk = new TorchSDK(config);
 
 const TON_ASSET = Asset.ton();
 const TSTON_ADDRESS = "EQC98_qAmNEptUtPc7W6xdHh_ZHrBUFpw5Ft_IzNU20QAJav";
@@ -38,11 +56,9 @@ const SUPPORTED_TOKENS = [
   "EQDPdq8xjAhytYqfGSX8KcFWIReCufsB9Wdg0pLlYSO_h76w",
 ];
 
-const TriTONPoolAddress = "EQDTvrxTLp9yKHpsAtcXkJGno_d9HYw62yaWpghlFhDUNQPJ";
-
-// TODO
-// Get pool data
-// leveraged farming(tsTON/USDT) a pool?
+// Deprecated
+const TRITON_POOL_V1 = "EQDTvrxTLp9yKHpsAtcXkJGno_d9HYw62yaWpghlFhDUNQPJ";
+const TRITON_POOL_V2 = "EQA4r_ieO3vJjsQtakcFu-iHpT1LFxdZkwV8yqNNElSmUW45";
 
 export class TorchFinance implements DEX {
   private wallet: OpenedContract<WalletContractV5R1>;
@@ -53,8 +69,10 @@ export class TorchFinance implements DEX {
     SupportedMethod.WITHDRAW,
   ]);
 
-  async send(args: SenderArguments | SenderArguments[]): Promise<string> {
+  // Send transaction
+  async send(args: SenderArguments | SenderArguments[]) {
     args = Array.isArray(args) ? args : [args];
+    // Create transfer message
     const msg = this.wallet.createTransfer({
       seqno: await this.wallet.getSeqno(),
       secretKey: this.keyPair.secretKey,
@@ -68,14 +86,12 @@ export class TorchFinance implements DEX {
       sendMode: SendMode.PAY_GAS_SEPARATELY,
       timeout: Math.floor(Date.now() / 1000) + 60,
     });
-    await this.wallet.send(msg);
-    const msgHash = "getMsgHash(wallet.address.toString(), msg)";
-    return msgHash;
+    return await this.wallet.send(msg);
   }
 
-  constructor(wallet, runtime: IAgentRuntime) {
+  constructor(wallet) {
     this.wallet = wallet;
-    const privateKey = runtime.getSetting(CONFIG_KEYS.TON_PRIVATE_KEY);
+    const privateKey = process.env.TON_PRIVATE_KEY;
     if (!privateKey) {
       throw new Error(`${CONFIG_KEYS.TON_PRIVATE_KEY} is missing`);
     }
@@ -89,21 +105,27 @@ export class TorchFinance implements DEX {
     });
   }
 
-  // Not supported
-  async createPool() {
-    throw new Error("Not Supported");
+  getSuppotedPools() {
+    return [TRITON_POOL_V2];
   }
 
   supportedTokens() {
     return SUPPORTED_TOKENS.push("TON");
   }
 
+  // Not supported
+  async createPool() {
+    throw new Error("Not Supported");
+  }
+
+  // Deposit tokens to liquidity pool
+  // Supported pools: TRITON_V2
   async deposit(
     jettonDeposits: JettonDeposit[],
     tonAmount: number,
     params: {
       slippageTolerance?: number;
-      pool?: string;
+      pool?: string | Address;
     }
   ) {
     const { slippageTolerance, pool } = params;
@@ -137,10 +159,9 @@ export class TorchFinance implements DEX {
 
     const depositParams: DepositParams = {
       queryId,
-      // TODO Look supported pools
-      pool: pool ?? TriTONPoolAddress,
+      pool: pool ?? TRITON_POOL_V2,
       depositAmounts,
-      slippageTolerance: slippageTolerance ?? 0.01, // 1%
+      slippageTolerance: slippageTolerance ?? 0.01,
     };
 
     const { result, getDepositPayload } = await sdk.simulateDeposit(
@@ -153,15 +174,13 @@ export class TorchFinance implements DEX {
       blockNumber: 27724599,
     });
 
-    const msgHash = await this.send(senderArgs);
-    console.log(`Transaction sent with msghash: ${msgHash}`);
+    return await this.send(senderArgs);
   }
 
   async withdraw(
     jettonWithdrawals: JettonWithdrawal[],
     isTon: boolean,
-    amount: number,
-    params: {}
+    amount: number
   ) {
     const queryId = await generateQueryId();
     const LpDecimals = 18;
@@ -170,22 +189,33 @@ export class TorchFinance implements DEX {
 
     let withdrawParams: WithdrawParams;
 
+    // Withdraw a single asset from the pool
     if (isTon && !jettonWithdrawals) {
       withdrawParams = {
-        mode: "Single", // Single Mode: Withdraw one specific asset
+        mode: "Single",
         queryId,
-        pool: TriTONPoolAddress, // Base Pool address
-        burnLpAmount: toUnit(amount, LpDecimals), // Amount of Base Pool LP tokens (TriTon) to remove
-        withdrawAsset: TON_ASSET, // Specify the asset to withdraw (TON)
+        pool: TRITON_POOL_V2,
+        burnLpAmount: toUnit(amount, LpDecimals),
+        withdrawAsset: TON_ASSET,
+      };
+    }
+    if (jettonWithdrawals.length === 1) {
+      withdrawParams = {
+        mode: "Single",
+        queryId,
+        pool: TRITON_POOL_V2,
+        burnLpAmount: toUnit(amount, LpDecimals),
+        withdrawAsset: Asset.jetton(jettonWithdrawals[0].jetton.address),
       };
     }
 
+    // Withdraw all assets proportionally
     if (isTon && jettonWithdrawals.length === 2) {
       withdrawParams = {
-        mode: "Balanced", // Balanced Mode: Withdraw all assets proportionally
+        mode: "Balanced",
         queryId,
-        pool: TriTONPoolAddress, // Base Pool address
-        burnLpAmount: toUnit(amount, LpDecimals), // Amount of Base Pool LP tokens (TriTon) to remove
+        pool: TRITON_POOL_V2,
+        burnLpAmount: toUnit(amount, LpDecimals),
       };
     }
 
@@ -199,7 +229,7 @@ export class TorchFinance implements DEX {
       blockNumber: blockNumber,
     });
 
-    return senderArgs;
+    return await this.send(senderArgs);
   }
 
   async claimFee() {

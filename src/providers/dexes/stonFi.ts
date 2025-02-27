@@ -12,9 +12,10 @@ import {
   Token,
   JettonWithdrawal,
   SupportedMethod,
-} from "./dex";
+} from ".";
 import { pTON, DEX as StonFiDEX } from "@ston-fi/sdk";
 import { mnemonicToPrivateKey } from "@ton/crypto";
+import { WalletProvider } from "../wallet";
 
 const client = new TonClient({
   endpoint: "https://testnet.toncenter.com/api/v2/jsonRPC",
@@ -35,7 +36,7 @@ export class StonFi implements DEX {
     SupportedMethod.WITHDRAW,
   ]);
 
-  constructor(wallet) {
+  constructor(wallet: WalletProvider) {
     this.wallet = wallet;
   }
 
@@ -64,26 +65,27 @@ export class StonFi implements DEX {
     if (jettonDeposits.length === 2) {
       // Single deposit
       if (jettonDeposits.filter((dep) => !!!dep.amount).length === 2) {
-        txParams = await router.getSingleSideProvideLiquidityJettonTxParams({
-          userWalletAddress: this.wallet.address,
-          sendTokenAddress:
-            jettonDeposits[0].amount > 0
-              ? jettonDeposits[0].jetton.address
-              : jettonDeposits[1].jetton.address,
-          sendAmount: toNano("1"),
-          otherTokenAddress:
-            jettonDeposits[0].amount > 0
-              ? jettonDeposits[1].jetton.address
-              : jettonDeposits[0].jetton.address,
-          minLpOut: "1",
-          queryId: 123456,
-        });
+        txParams =
+          await await router.getSingleSideProvideLiquidityJettonTxParams({
+            userWalletAddress: this.wallet.getAddress(),
+            sendTokenAddress:
+              jettonDeposits[0].amount > 0
+                ? jettonDeposits[0].jetton.address
+                : jettonDeposits[1].jetton.address,
+            sendAmount: toNano("1"),
+            otherTokenAddress:
+              jettonDeposits[0].amount > 0
+                ? jettonDeposits[1].jetton.address
+                : jettonDeposits[0].jetton.address,
+            minLpOut: "1",
+            queryId: 123456,
+          });
       } else {
         // Deposit both Jettons
         txParams = await Promise.all([
-          jettonDeposits.map((jettonDeposit, index) => {
-            return router.getProvideLiquidityJettonTxParams({
-              userWalletAddress: this.wallet.address,
+          jettonDeposits.map(async (jettonDeposit, index) => {
+            return await router.getProvideLiquidityJettonTxParams({
+              userWalletAddress: this.wallet.getAddress(),
               sendTokenAddress: jettonDeposit.jetton.address,
               sendAmount: toNano(jettonDeposit.amount),
               otherTokenAddress: jettonDeposits[(index + 1) % 2].jetton.address,
@@ -99,11 +101,11 @@ export class StonFi implements DEX {
         "kQACS30DNoUQ7NfApPvzh7eBmSZ9L4ygJ-lkNWtba8TQT-Px" // pTON v2.1.0
       );
       // Deposit both TON and Jetton
-      if (tonAmount > 0 && jettonDeposits[0].amount > 0) {
+      if (tonAmount > 0 && jettonDeposits[0]?.amount > 0) {
         txParams = await Promise.all([
           // deposit 1 TON to the TON/TestRED pool and get at least 1 nano LP token
-          router.getProvideLiquidityTonTxParams({
-            userWalletAddress: this.wallet.address,
+          await router.getProvideLiquidityTonTxParams({
+            userWalletAddress: this.wallet.getAddress(),
             proxyTon,
             sendAmount: toNano(tonAmount),
             otherTokenAddress: jettonDeposits[0].jetton.address,
@@ -111,8 +113,8 @@ export class StonFi implements DEX {
             queryId: 12345,
           }),
           // deposit 1 TestRED to the TON/TestRED pool and get at least 1 nano LP token
-          router.getProvideLiquidityJettonTxParams({
-            userWalletAddress: this.wallet.address,
+          await router.getProvideLiquidityJettonTxParams({
+            userWalletAddress: this.wallet.getAddress(),
             sendTokenAddress: jettonDeposits[0].jetton.address,
             sendAmount: toNano(jettonDeposits[0].amount),
             otherTokenAddress: proxyTon.address,
@@ -124,17 +126,17 @@ export class StonFi implements DEX {
         if (tonAmount) {
           // Deposit only TON
           txParams = await router.getSingleSideProvideLiquidityTonTxParams({
-            userWalletAddress: this.wallet.address,
+            userWalletAddress: this.wallet.getAddress(),
             proxyTon,
             sendAmount: toNano(tonAmount),
-            otherTokenAddress: jettonDeposits[0].jetton.address,
+            otherTokenAddress: jettonDeposits[0].jetton.address.toString(),
             minLpOut: "1",
             queryId: 12345,
           });
         } else {
           // Deposit only Jetton
           txParams = await router.getSingleSideProvideLiquidityTonTxParams({
-            userWalletAddress: this.wallet.address,
+            userWalletAddress: this.wallet.getAddress(),
             proxyTon,
             sendAmount: toNano(jettonDeposits[0].amount),
             otherTokenAddress: proxyTon.address,
@@ -232,11 +234,11 @@ export class StonFi implements DEX {
   }
 
   private async sendTransaction(txParams: SenderArguments) {
-    const dex = client.open(new StonFiDEX.v1.Router());
-    const mnemonics = Array.from(
-      { length: 24 },
-      (_, i) => `your mnemonic word ${i + 1}`
-    ); // replace with your mnemonic
+    const privateKey = process.env.TON_PRIVATE_KEY;
+    if (!privateKey) {
+      throw new Error(`Private key is missing`);
+    }
+    const mnemonics = privateKey.split(" ");
     const keyPair = await mnemonicToPrivateKey(mnemonics);
 
     const workchain = 0;
@@ -247,7 +249,6 @@ export class StonFi implements DEX {
 
     const contract = client.open(wallet);
 
-    // and send it manually later
     await contract.sendTransfer({
       seqno: await contract.getSeqno(),
       secretKey: keyPair.secretKey,

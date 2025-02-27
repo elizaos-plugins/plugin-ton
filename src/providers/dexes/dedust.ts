@@ -4,7 +4,7 @@ import {
   JettonWithdrawal,
   SupportedMethod,
   Token,
-} from "./dex";
+} from ".";
 import {
   Factory,
   JettonRoot,
@@ -41,8 +41,6 @@ export class Dedust implements DEX {
   ]);
 
   async init(runtime: IAgentRuntime) {
-    // TODO
-    // const privateKey = runtime.getSetting(CONFIG_KEYS.TON_PRIVATE_KEY);
     const privateKey = process.env.TON_PRIVATE_KEY;
     if (!privateKey) {
       throw new Error(`${CONFIG_KEYS.TON_PRIVATE_KEY} is missing`);
@@ -61,6 +59,8 @@ export class Dedust implements DEX {
   }
 
   async createPool(jettons: JettonMaster[]) {
+    console.log(await factory.getNativeVault());
+    return
     const isTon = jettons.length === 1;
 
     const assets: [Asset, Asset] = [

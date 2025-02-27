@@ -5,8 +5,6 @@ export type Token = {
   name: string;
 };
 
-
-
 export interface DEX {
   supportMethods: readonly SupportedMethod[];
   createPool?: (jettons: JettonMaster[]) => {};
