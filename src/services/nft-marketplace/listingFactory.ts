@@ -5,9 +5,8 @@ import {
   StateInit,
   storeStateInit,
   toNano,
+  TupleReader,
 } from "@ton/core";
-import { WalletProvider } from "../providers/wallet";
-import { getNftOwner } from "./NFTItem";
 
 export interface NftFixPriceSaleV4DR1Data {
   isComplete: boolean;
@@ -222,32 +221,6 @@ export async function buildNftAuctionV3R3DeploymentBody(
     .endCell();
 
   return transferNftBody;
-}
-
-export async function getListingData(walletProvider: WalletProvider, nftAddress: string): Promise<{
-  listingAddress: Address;
-  owner: Address;
-  fullPrice: bigint;
-}> {
-  try {
-    const listingAddress = await getNftOwner(walletProvider, nftAddress);
-
-    const client = walletProvider.getWalletClient();
-    const result = await client.runMethod(listingAddress, "get_sale_data");
-
-    result.stack.skip(5);
-
-    const owner = result.stack.readAddress() as Address;
-    const fullPrice = result.stack.readBigNumber();
-
-    return {
-      listingAddress,
-      owner,
-      fullPrice,
-    };
-  } catch (error) {
-    throw new Error(`Failed to get listing data: ${error.message}`);
-  }
 }
 
 export const marketplaceAddress = Address.parse(

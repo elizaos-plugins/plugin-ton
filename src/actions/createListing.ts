@@ -18,7 +18,7 @@ import {
   destinationAddress,
   marketplaceAddress,
   marketplaceFeeAddress,
-} from "../utils/NFTAuction";
+} from "../services/nft-marketplace/listingFactory";
 
 // Configuration constants
 const CONFIG = {

@@ -13,7 +13,8 @@ import {
   import { z } from "zod";
   import { initWalletProvider, WalletProvider } from "../providers/wallet";
   import { waitSeqnoContract } from "../utils/util";
-import { getListingData } from "../utils/NFTAuction";
+import { getBuyPrice, getListingData } from "../services/nft-marketplace/listingData";
+import { buyListing } from "../services/nft-marketplace/listingTransactions";
   
   /**
    * Schema for buy listing input.
@@ -91,43 +92,9 @@ import { getListingData } from "../utils/NFTAuction";
       try {
         elizaLogger.log(`Starting purchase of NFT: ${nftAddress}`);
         
-        const listingData = await getListingData(this.walletProvider, nftAddress);
+        const receipt = await buyListing(this.walletProvider, nftAddress);
         
-        // Calculate amount to send (price + gas)
-        const gasAmount = toNano("1");  // 1 TON for gas
-        const amountToSend = listingData.fullPrice + gasAmount;
-        
-        elizaLogger.log(`Listing address: ${listingData.listingAddress.toString()}`);
-        elizaLogger.log(`Listing price: ${listingData.fullPrice.toString()}`);
-        elizaLogger.log(`Amount to send: ${amountToSend.toString()}`);
-        
-        // Send the transaction to buy
-        const client = this.walletProvider.getWalletClient();
-        const contract = client.open(this.walletProvider.wallet);
-        
-        const seqno = await contract.getSeqno();
-        const transferMessage = internal({
-          to: listingData.listingAddress,
-          value: amountToSend,
-          bounce: true,
-          body: "", // Empty body for default buy operation
-        });
-        
-        const transfer = await contract.sendTransfer({
-          seqno,
-          secretKey: this.walletProvider.keypair.secretKey,
-          messages: [transferMessage],
-          sendMode: SendMode.IGNORE_ERRORS + SendMode.PAY_GAS_SEPARATELY,
-        });
-        
-        await waitSeqnoContract(seqno, contract);
-        
-        return {
-          nftAddress,
-          listingAddress: listingData.listingAddress.toString(),
-          price: listingData.fullPrice.toString(),
-          message: "Buy transaction sent successfully",
-        };
+        return receipt;
       } catch (error) {
         elizaLogger.error(`Error buying NFT ${nftAddress}: ${error}`);
         throw new Error(`Failed to buy NFT: ${error.message}`);

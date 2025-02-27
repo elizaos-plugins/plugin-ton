@@ -14,7 +14,7 @@ import { Builder } from "@ton/core";
 import { z } from "zod";
 import { initWalletProvider, WalletProvider } from "../providers/wallet";
 import { waitSeqnoContract } from "../utils/util";
-import { buildNftFixPriceSaleV3R3DeploymentBody, destinationAddress, marketplaceAddress, marketplaceFeeAddress } from "../utils/NFTAuction";
+import { buildNftFixPriceSaleV3R3DeploymentBody, destinationAddress, marketplaceAddress, marketplaceFeeAddress } from "../services/nft-marketplace/listingFactory";
 
 /**
  * Schema for auction interaction input.
