@@ -59,7 +59,6 @@ describe("DEX: DeDust", () => {
       const pavul = new JettonMaster(
         Address.parse("EQChXgdfER2nuLvZP5EiSlCf95oXZ5KDiCEmGBBv_WcNdxz3")
       );
-      // TODO Try testnet or mock locally
       const result = await dedustClient.createPool([build, pavul]);
       expect(result).toEqual(true);
     });
