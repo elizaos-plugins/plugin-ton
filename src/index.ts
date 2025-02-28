@@ -7,7 +7,7 @@ import dexAction from "./actions/dex.ts";
 export { WalletProvider, transferAction as TransferTonToken };
 export { DexProvider, dexAction };
 
-export const tonPlugin2: Plugin = {
+export const tonPlugin: Plugin = {
     name: "ton",
     description: "Ton Plugin for Eliza",
     actions: [transferAction, ],
@@ -15,4 +15,4 @@ export const tonPlugin2: Plugin = {
     providers: [nativeWalletProvider, dexProvider],
 };
 
-export default tonPlugin2;
+export default tonPlugin;
