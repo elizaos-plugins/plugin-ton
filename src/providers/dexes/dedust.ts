@@ -59,8 +59,6 @@ export class Dedust implements DEX {
   }
 
   async createPool(jettons: JettonMaster[]) {
-    console.log(await factory.getNativeVault());
-    return
     const isTon = jettons.length === 1;
 
     const assets: [Asset, Asset] = [
