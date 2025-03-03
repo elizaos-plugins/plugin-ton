@@ -19,15 +19,17 @@ This plugin provides functionality to:
 
 ### Screenshot
 
-![alt text](./screenshot/transfer.png "Transfer TON")
-![alt text](./screenshot/jetton-transfer.png "Transfer Jetton")
-![alt text](./screenshot/nft-transfer.png "NFT Transfer")
-![alt text](./screenshot/ton-jetton-batch-transfer.png "Transfer Jetton and TON")
-![alt text](./screenshot/connect.png "Connect with TonConnect QR Code")
-![alt text](./screenshot/status.png "TonConnect Status")
-![alt text](./screenshot/disconnect.png "Disconnect")
-
+![ton transfer](./screenshot/transfer.png "Transfer TON")
+![jetton transfer](./screenshot/jetton-transfer.png "Transfer Jetton")
+![nft transfer](./screenshot/nft-transfer.png "NFT Transfer")
+![jetton and ton transfer](./screenshot/ton-jetton-batch-transfer.png "Transfer Jetton and TON")
+![](./screenshot/connect.png "Connect with TonConnect QR Code")
+![connection status](./screenshot/status.png "TonConnect Status")
+![disconnect](./screenshot/disconnect.png "Disconnect")
 ![lending](./screenshot/lending_info.png "Get lending info for TON")
+![nft listing and cancellation](./screenshot/nft-listing-and-cancel.png "NFT Listing Creation and Cancellation")
+![auction creation](./screenshot/nft-auctino.png "NFT Auction Creation")
+![bidding and buying](./screenshot/nft-bid-and-buy.png "NFT Bidding and Buying")
 
 ### Quick Start
 
