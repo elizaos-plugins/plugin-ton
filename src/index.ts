@@ -7,6 +7,11 @@ import unstakeAction from "./actions/unstake.ts";
 import getPoolInfoAction from "./actions/getPoolInfo.ts";
 import batchTransferAction from "./actions/batchTransfer.ts";
 import auctionAction from "./actions/auctionInteraction.ts";
+import createListingAction from "./actions/createListing.ts";
+import buyListingAction from "./actions/buyListing.ts";
+import createAuctionAction from "./actions/createAuction.ts";
+import bidListingAction from "./actions/bidListing.ts";
+import cancelListingAction from "./actions/cancelListing.ts";
 import { WalletProvider, nativeWalletProvider } from "./providers/wallet.ts";
 import transferNFTAction from "./actions/transferNFT.ts"
 import mintNFTAction from "./actions/mintNFT.ts"
@@ -17,6 +22,7 @@ import { tonTokenPriceProvider } from "./providers/tokenProvider.ts";
 
 export { tokenPriceAction as GetTokenPrice };
 import { StakingProvider, nativeStakingProvider } from "./providers/staking.ts";
+import { create } from "handlebars";
 
 export {
   WalletProvider,
@@ -62,6 +68,12 @@ export const tonPlugin: Plugin = {
     showConnectionStatusAction,
     tonConnectTransactionAction,
     tokenPriceAction,
+    //auctionAction as Action,
+    createListingAction as Action,
+    createAuctionAction as Action,
+    bidListingAction as Action,
+    buyListingAction as Action,
+    cancelListingAction as Action,
     auctionAction as Action,
     transferNFTAction as Action,
     mintNFTAction as Action,
@@ -69,7 +81,12 @@ export const tonPlugin: Plugin = {
     getCollectionDataAction as Action,
   ],
   evaluators: [],
-  providers: [nativeWalletProvider, nativeStakingProvider, tonConnectProvider,tonTokenPriceProvider],
+  providers: [
+    nativeWalletProvider,
+    nativeStakingProvider,
+    tonConnectProvider,
+    tonTokenPriceProvider,
+  ],
 };
 
 export default tonPlugin;
