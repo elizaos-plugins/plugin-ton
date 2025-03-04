@@ -40,6 +40,12 @@ import tonConnectTransactionAction from "./actions/tonConnectTransaction.ts";
 export { batchTransferAction as BatchTransferTokens };
 export { auctionAction as AuctionInteractionActionTon };
 
+export { getCollectionDataAction as GetCollectionData ,
+  updateNFTMetadataAction as UpdateNFTMetadata,
+  mintNFTAction as MintNFT,
+  transferNFTAction as TransferNFT,
+};
+
 export const tonPlugin: Plugin = {
   name: "ton",
   description: "Ton Plugin for Eliza",
