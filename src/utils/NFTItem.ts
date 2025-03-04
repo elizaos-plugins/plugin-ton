@@ -1,5 +1,6 @@
 import { Address, beginCell, Cell, internal, SendMode, TonClient } from "@ton/ton";
 import { MintParams, NFTCollection } from "./NFTCollection";
+import { WalletProvider } from "../providers/wallet";
 
 export async function getAddressByIndex(
     client: TonClient,
@@ -37,13 +38,16 @@ export class NftItem {
     }
   
     public async deploy(
-      wallet,
+      walletProvider: WalletProvider,
       params: MintParams
     ): Promise<number> {
-      const seqno = await wallet.contract.getSeqno();
-      await wallet.contract.sendTransfer({
+
+      const walletClient = walletProvider.getWalletClient();
+      const contract = walletClient.open(walletProvider.wallet);
+      const seqno = await contract.getSeqno();
+      await contract.sendTransfer({
         seqno,
-        secretKey: wallet.keyPair.secretKey,
+        secretKey: walletProvider.keypair.secretKey,
         messages: [
           internal({
             value: "0.05",

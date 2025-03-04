@@ -10,14 +10,15 @@ import {
   type Content,
 } from "@elizaos/core";
 import { z } from "zod";
-import { Address, toNano } from "@ton/core";
+import { Address, toNano } from "@ton/ton";
 import { initWalletProvider, WalletProvider } from "../providers/wallet";
 
 import path from "path";
 import { CollectionData, NFTCollection } from "../utils/NFTCollection";
-import { topUpBalance, updateMetadataFiles, uploadFolderToIPFS, uploadJSONToIPFS, waitSeqno } from "../utils/util";
+import { topUpBalance, updateMetadataFiles, uploadFolderToIPFS, uploadJSONToIPFS, waitSeqnoContract } from "../utils/util";
 import { readdir } from "fs/promises";
 import { NftItem } from "../utils/NFTItem";
+import { getAddressByIndex } from "../utils/NFTItem";
 /**
  * Extended interface for minting content.
  * - nftType: Defines if the NFT is part of a collection ("standalone") or if a new collection should be created ("collection").
@@ -29,8 +30,8 @@ export interface MintContent extends Content {
   collection?: string;
   owner: string;
   storage: "file" | "prompt";
-  imagesFolderPath: string;
-  metadataFolderPath: string;
+  imagesFolderPath?: string;
+  metadataFolderPath?: string;
   metadata?: {
     name: string;
     description?: string;
@@ -38,19 +39,41 @@ export interface MintContent extends Content {
     content_url?: string;
     attributes?: any[];
   };
+  royaltyPercent?: number;
+  royaltyAddress?: string;
 }
 
 /**
  * A type guard to verify the MintContent payload.
  */
-function isMintContent(content: MintContent): content is MintContent {
-  console.log("Content for mint", content);
-  return (typeof content.nftType === "string" &&
-    (content.nftType === "collection" && content.collection || content.nftType === "standalone" && !content.collection) &&
-    typeof content.owner === "string" &&
-    typeof content.storage === "string" &&
-    ((content.storage === "file" && content.imagesFolderPath && content.metadataFolderPath) || (content.storage === "prompt" && content.metadata))) as unknown as boolean;
-
+function isMintContent(content: Content): content is MintContent {
+  elizaLogger.log("Validating mint content:", content);
+  
+  // Basic validation
+  if (!content.nftType || !content.storage) {
+    elizaLogger.error("Missing required fields: nftType or storage");
+    return false;
+  }
+  
+  // Validate nftType
+  if (content.nftType !== "collection" && content.nftType !== "standalone") {
+    elizaLogger.error(`Invalid nftType: ${content.nftType}`);
+    return false;
+  }
+  
+  // Validate collection address for standalone NFTs
+  if (content.nftType === "standalone" && !content.collection) {
+    elizaLogger.error("Collection address is required for standalone NFTs");
+    return false;
+  }
+  
+  // Validate storage type
+  if (content.storage !== "file" && content.storage !== "prompt") {
+    elizaLogger.error(`Invalid storage type: ${content.storage}`);
+    return false;
+  }
+  
+  return true;
 }
 
 /**
@@ -65,20 +88,20 @@ function isMintContent(content: MintContent): content is MintContent {
 const mintNFTSchema = z
   .object({
     nftType: z.enum(["collection", "standalone"]).default("standalone"),
-    collection: z.string().optional(),
+    collection: z.string().optional().nullable(),
     owner: z.string().nonempty({ message: "Owner address is required" }),
     storage: z.enum(["file", "prompt"]).default("file"),
-    imagesFolderPath: z.string().optional(),
-    metadataFolderPath: z.string().optional(),
-    royaltyPercent: z.number().optional(),
-    royaltyAddress: z.string().optional(),
+    imagesFolderPath: z.string().optional().nullable(),
+    metadataFolderPath: z.string().optional().nullable(),
+    royaltyPercent: z.number().optional().nullable(),
+    royaltyAddress: z.string().optional().nullable(),
     metadata: z.object({
       name: z.string().nonempty({ message: "NFT name is required" }),
       description: z.string().optional(),
       image: z.string().nonempty({ message: "Image URL is required" }),
       cover_image: z.string().optional(),
       social_links: z.array(z.string().optional()).optional(),
-    }).optional(),
+    }).optional().nullable(),
   })
   .refine((data) => {
     if (data.nftType === "standalone") {
@@ -166,18 +189,23 @@ const buildMintDetails = async (
     template: mintNFTTemplate,
   });
 
-  const content = await generateObject({
-    runtime,
-    context: mintContext,
-    schema: mintNFTSchema,
-    modelClass: ModelClass.SMALL,
-  });
+  try {
+    const content = await generateObject({
+      runtime,
+      context: mintContext,
+      schema: mintNFTSchema,
+      modelClass: ModelClass.SMALL,
+    });
 
-  let mintContent: MintContent = content.object as MintContent;
-  if (mintContent === undefined) {
-    mintContent = content as unknown as MintContent;
+    let mintContent: MintContent = content.object as MintContent;
+    if (mintContent === undefined) {
+      mintContent = content as unknown as MintContent;
+    }
+    return mintContent;
+  } catch (error) {
+    elizaLogger.error("Error generating mint content:", error);
+    throw new Error(`Failed to generate mint content: ${error.message}`);
   }
-  return mintContent;
 };
 
 /**
@@ -196,79 +224,146 @@ class MintNFTAction {
   }
 
   /**
-   * Crafts a deploy transaction for the NFT update in the collection.
-   * This operation builds an update cell that contains a dictionary with new NFT item data.
-   * @returns the hash of the transaction or undefined if the transaction fails
+   * Uploads content to IPFS based on storage type
    */
-  // async deployNFTInCollection(params: MintContent, nftIndex: number): Promise<string | undefined> {
+  private async uploadContent(params: MintContent): Promise<{ metadataIpfsHash: string, imagesIpfsHash?: string }> {
+    let metadataIpfsHash: string;
+    let imagesIpfsHash: string | undefined;
     
-  //   const walletClient = this.walletProvider.getWalletClient();
-  //   const contract = walletClient.open(this.walletProvider.wallet);
+    try {
+      if (params.storage === "file") {
+        if (!params.imagesFolderPath || !params.metadataFolderPath) {
+          throw new Error("Image and metadata folder paths are required for file storage");
+        }
+        
+        elizaLogger.log("Started uploading images to IPFS...");
+        imagesIpfsHash = await uploadFolderToIPFS(params.imagesFolderPath);
+        elizaLogger.log(
+          `Successfully uploaded the pictures to ipfs: https://gateway.pinata.cloud/ipfs/${imagesIpfsHash}`
+        );
+      
+        elizaLogger.log("Started uploading metadata files to IPFS...");
+        await updateMetadataFiles(params.metadataFolderPath, imagesIpfsHash);
+        metadataIpfsHash = await uploadFolderToIPFS(params.metadataFolderPath);
+        elizaLogger.log(
+          `Successfully uploaded the metadata to ipfs: https://gateway.pinata.cloud/ipfs/${metadataIpfsHash}`
+        );
+        return { metadataIpfsHash, imagesIpfsHash };
+      } else if(params.storage === "prompt"){
+        if(!params.metadata) {
+          throw new Error("Metadata is required for prompt storage");
+        }
+        elizaLogger.log("Uploading metadata JSON to IPFS...");
+        metadataIpfsHash = await uploadJSONToIPFS(params.metadata);
+        elizaLogger.log(`Successfully uploaded metadata to IPFS: ${metadataIpfsHash}`);
+        return { metadataIpfsHash };
+      }
+      
+      throw new Error("Invalid storage type");
+    } catch (error) {
+      elizaLogger.error("Error uploading content to IPFS:", error);
+      throw new Error(`Failed to upload content: ${error.message}`);
+    }
+  }
+
+  /**
+   * Deploys a standalone NFT to an existing collection
+   */
+  private async deployStandaloneNFT(params: MintContent): Promise<any> {
+    if(!params.collection) {
+      throw new Error("Collection address is required for standalone NFTs");
+    }
     
-  //   // Build NFT content:
-  //   // Create a cell for metadata.
-  //   // Use content_url if available (off-chain) or JSON string of metadata (on-chain).
-  //   const metaString = params.metadata.content_url
-  //     ? params.metadata.content_url
-  //     : JSON.stringify(params.metadata);
-  //   const metaCell = beginCell().storeStringTail(metaString).endCell();
+    try {
+      elizaLogger.log(`Reading metadata files from ${params.metadataFolderPath}`);
+      const files = await readdir(params.metadataFolderPath as string);
+      files.pop(); // Remove collection.json
+      let index = 0;
+      
+      elizaLogger.log(`Found ${files.length} NFT metadata files to deploy`);
+      elizaLogger.log("Topping up wallet balance...");
+      let seqno = await topUpBalance(this.walletProvider, files.length, params.collection);
+      const walletClient = this.walletProvider.getWalletClient();
+      const contract = walletClient.open(this.walletProvider.wallet);
+      await waitSeqnoContract(seqno, contract);
+      
+      for (const file of files) {
+        elizaLogger.log(`Starting deployment of NFT ${index + 1}/${files.length}`);
+        const mintParams = {
+          queryId: 0,
+          itemOwnerAddress: this.walletProvider.wallet.address,
+          itemIndex: index,
+          amount: toNano("0.05"),
+          commonContentUrl: file,
+        };
+    
+        const nftItem = new NftItem(params.collection);
+        seqno = await nftItem.deploy(this.walletProvider, mintParams);
+        await waitSeqnoContract(seqno, this.walletProvider.wallet);
 
-  //   // Create NFT content cell that stores owner's address and a ref to the meta cell.
-  //   const nftContent = beginCell()
-  //     .storeAddress(Address.parse(params.owner))
-  //     .storeRef(metaCell)
-  //     .endCell();
+        // Get the NFT address using the getAddressByIndex function
+        const client = this.walletProvider.getWalletClient();
+        const nftAddress = await getAddressByIndex(
+          client, 
+          Address.parse(params.collection), 
+          index
+        );
+        elizaLogger.log(`Successfully deployed NFT ${index + 1}/${files.length} with address: ${nftAddress}`);
 
-  //   // Create a dictionary with one NFT item. The key is the nftIndex.
-  //   const nftDictionary = Dictionary.empty<number, Cell>(Dictionary.Keys.Uint(64));
-  //   nftDictionary.set(nftIndex, nftContent);
+        // Add to deployedNfts array if you want to track them
+        index++;
+      }
+      
+    } catch (error) {
+      elizaLogger.error("Error deploying standalone NFT:", error);
+      throw new Error(`Failed to deploy standalone NFT: ${error.message}`);
+    }
+  }
 
-  //   // Craft the update message cell.
-  //   const messageBody = beginCell()
-  //     .storeUint(2, 32) // Operation code for minting NFT item in the collection.
-  //     .storeUint(0, 64) // Query id (set to 0 for simulation).
-  //     .storeDict(nftDictionary, Dictionary.Keys.Uint(64), {
-  //       serialize: (src, builder) => {
-  //         // Minimal storage deposit for this NFT item.
-  //         builder.storeCoins(toNano("0.05"));
-  //         builder.storeRef(src);
-  //       },
-  //       parse: (src) => {
-  //         return beginCell()
-  //           .storeCoins(src.loadCoins())
-  //           .storeRef(src.loadRef())
-  //           .endCell();
-  //       },
-  //     })
-  //     .endCell();
+  /**
+   * Deploys a new NFT collection
+   */
+  private async deployCollection(params: MintContent, metadataIpfsHash: string): Promise<string> {
+    try {
+      elizaLogger.log("[TON] Starting deployment of NFT collection...");
+      
+      // Use default values if not provided
+      const royaltyPercent = params.royaltyPercent ?? 5;
+      const royaltyAddress = params.royaltyAddress 
+        ? Address.parse(params.royaltyAddress) 
+        : this.walletProvider.wallet.address;
+      
+      const collectionData: CollectionData = {
+        ownerAddress: this.walletProvider.wallet.address,
+        royaltyPercent: royaltyPercent, 
+        royaltyAddress: royaltyAddress,
+        nextItemIndex: 0,
+        collectionContentUrl: `ipfs://${metadataIpfsHash}/collection.json`,
+        commonContentUrl: `ipfs://${metadataIpfsHash}/`,
+      };
+      
+      elizaLogger.log("Creating NFT collection with data:", {
+        owner: collectionData.ownerAddress.toString(),
+        royaltyPercent: collectionData.royaltyPercent,
+        royaltyAddress: collectionData.royaltyAddress.toString(),
+        collectionContentUrl: collectionData.collectionContentUrl,
+      });
+      
+      const collection = new NFTCollection(collectionData);
+      let seqno = await collection.deploy(this.walletProvider);
+      elizaLogger.log(`Collection deployment transaction sent, waiting for confirmation...`);
 
-  //   // Calculate total value to attach: minimal storage deposit plus a fee.
-  //   const totalValue = String((parseFloat("0.05") + 0.015).toFixed(6));
-
-  //   // Prepare the internal update message.
-  //   const internalMessage = internal({
-  //     to: Address.parse(params.collection!),
-  //     value: toNano(totalValue),
-  //     bounce: true,
-  //     body: messageBody,
-  //   });
-
-  //     const seqno: number = await contract.getSeqno();
-  //     const transfer = await contract.createTransfer({
-  //         seqno,
-  //         secretKey: this.walletProvider.keypair.secretKey,
-  //         messages: [internalMessage],
-  //     });
-  //     await sleep(1500);
-  //     await contract.send(transfer);
-  //     await sleep(1500);
-  //     // this.waitForTransaction(seqno, contract);
-  //     const state = await walletClient.getContractState(
-  //         this.walletProvider.wallet.address,
-  //     );
-  //     const { lt: _, hash: lastHash } = state.lastTransaction;
-  //     return base64ToHex(lastHash) || undefined;
-  // }
+      const walletClient = this.walletProvider.getWalletClient();
+      const contract = walletClient.open(this.walletProvider.wallet);
+      await waitSeqnoContract(seqno, contract);
+      elizaLogger.log(`Collection successfully deployed: ${collection.address}`);
+      
+      return collection.address.toString();
+    } catch (error) {
+      elizaLogger.error("Error deploying NFT collection:", error);
+      throw new Error(`Failed to deploy NFT collection: ${error.message}`);
+    }
+  }
 
   /**
    * Main minting method.
@@ -278,77 +373,27 @@ class MintNFTAction {
    * - For "collection": a new collection address is simulated and the first NFT (index 0) is minted.
    * - For "standalone": uses the provided collection address and queries it to get the next available NFT index.
    */
-  async mint(params: MintContent): Promise<void> {
+  async mint(params: MintContent): Promise<string> {
+    try {
+      elizaLogger.log(`Starting NFT minting process for type: ${params.nftType}`);
+      elizaLogger.log(`Using storage type: ${params.storage}`);
+      
+      const { metadataIpfsHash } = await this.uploadContent(params);
+      elizaLogger.log(`Content uploaded to IPFS with hash: ${metadataIpfsHash}`);
 
-    let metadataIpfsHash: string;
-    let imagesIpfsHash: string;
-    // If off-chain storage is selected, upload metadata to IPFS and update content_url.
-    if (params.storage === "file") {
-      elizaLogger.log("Started uploading images to IPFS...");
-      imagesIpfsHash = await uploadFolderToIPFS(params.imagesFolderPath as string);
-      elizaLogger.log(
-        `Successfully uploaded the pictures to ipfs: https://gateway.pinata.cloud/ipfs/${imagesIpfsHash}`
-      );
-    
-      elizaLogger.log("Started uploading metadata files to IPFS...");
-      await updateMetadataFiles(params.metadataFolderPath as string, imagesIpfsHash);
-      metadataIpfsHash = await uploadFolderToIPFS(params.metadataFolderPath as string);
-      elizaLogger.log(
-        `Successfully uploaded the metadata to ipfs: https://gateway.pinata.cloud/ipfs/${metadataIpfsHash}`
-      );
-    } else if(params.storage === "prompt"){
-      if(!params.metadata) {
-        throw new Error("Metadata is required for prompt storage");
+      if (params.nftType === "standalone") {
+        elizaLogger.log(`Deploying standalone NFT to collection: ${params.collection}`);
+        return await this.deployStandaloneNFT(params);
+      } else if(params.nftType === "collection"){
+        elizaLogger.log("Deploying new NFT collection");
+        return await this.deployCollection(params, metadataIpfsHash);
+      } else {
+        throw new Error(`Invalid NFT type: ${params.nftType}`);
       }
-      metadataIpfsHash = await uploadJSONToIPFS(params.metadata);
+    } catch (error) {
+      elizaLogger.error("Error in mint method:", error);
+      throw new Error(`Mint operation failed: ${error.message}`);
     }
-
-    if (params.nftType === "standalone") {
-
-      if(!params.collection) {
-        throw new Error("Collection address is required for standalone NFTs");
-      }
-      const files = await readdir(params.metadataFolderPath);
-      files.pop();
-      let index = 0;
-
-      let seqno = await topUpBalance(this.walletProvider.wallet, files.length, params.collection);
-      await waitSeqno(seqno, this.walletProvider.wallet);
-      for (const file of files) {
-        elizaLogger.log(`Start deploy of ${index + 1} NFT`);
-        const mintParams = {
-          queryId: 0,
-          itemOwnerAddress: this.walletProvider.wallet.address,
-          itemIndex: index,
-          amount: toNano("0.05"),
-          commonContentUrl: file,
-        };
-    
-        const nftItem = new NftItem(params.collection!);
-        seqno = await nftItem.deploy(this.walletProvider.wallet, mintParams);
-        console.log(`Successfully deployed ${index + 1} NFT`);
-        await waitSeqno(seqno, this.walletProvider.wallet);
-        index++;
-      }
-
-    } else if(params.nftType === "collection"){
-      // For collection NFTs, use provided collection address.
-      elizaLogger.log("[TON] Start deploy of nft collection...");
-      const collectionData: CollectionData = {
-        ownerAddress: this.walletProvider.wallet.address,
-        royaltyPercent: params.royaltyPercent as number, 
-        royaltyAddress: Address.parse(params.royaltyAddress as string),
-        nextItemIndex: 0,
-        collectionContentUrl: `ipfs://${metadataIpfsHash}/collection.json`,
-        commonContentUrl: `ipfs://${metadataIpfsHash}/`,
-      };
-      const collection = new NFTCollection(collectionData);
-      let seqno = await collection.deploy(this.walletProvider.wallet);
-      console.log(`Collection deployed: ${collection.address}`);
-      await waitSeqno(seqno, this.walletProvider.wallet);
-    } else {
-      throw new Error("Invalid NFT type");
-    } 
   }
 }
 
@@ -369,13 +414,37 @@ export default {
       // Build mint details using the helper method.
       let mintParams = await buildMintDetails(runtime, message, state);
 
-      // Validate the content using the type guard (for debugging purposes).
+      elizaLogger.log("Mint parameters extracted:", {
+        nftType: mintParams.nftType,
+        storage: mintParams.storage,
+        collection: mintParams.collection || "N/A",
+      });
+
+      // Validate the content using the type guard
       if (!isMintContent(mintParams)) {
-        throw new Error("Mint parameters validation failed");
+        elizaLogger.error("Invalid mint content:", mintParams);
+        if (callback) {
+          callback({
+            text: "Unable to process mint request. Invalid content provided.",
+            content: { error: "Invalid mint content" },
+          });
+        }
+        return false;
       }
 
-      mintParams.imagesFolderPath = runtime.getSetting("TON_NFT_IMAGES_FOLDER") || path.join(process.cwd(), "ton_nft_images");
-      mintParams.metadataFolderPath = runtime.getSetting("TON_NFT_METADATA_FOLDER") || path.join(process.cwd(), "ton_nft_metadata");
+      // Set default paths if not provided
+      mintParams.imagesFolderPath = mintParams.imagesFolderPath || 
+        runtime.getSetting("TON_NFT_IMAGES_FOLDER") || 
+        path.join(process.cwd(), "ton_nft_images");
+      
+      mintParams.metadataFolderPath = mintParams.metadataFolderPath || 
+        runtime.getSetting("TON_NFT_METADATA_FOLDER") || 
+        path.join(process.cwd(), "ton_nft_metadata");
+
+      elizaLogger.log("Using paths:", {
+        imagesFolderPath: mintParams.imagesFolderPath,
+        metadataFolderPath: mintParams.metadataFolderPath,
+      });
 
       // Mint the NFT.
       const walletProvider = await initWalletProvider(runtime);
@@ -392,6 +461,8 @@ export default {
         nftType: mintParams.nftType,
         message: "NFT minted successfully",
       };
+
+      elizaLogger.log("NFT minted successfully:", result);
 
       if (callback) {
         callback({
@@ -417,6 +488,7 @@ export default {
     [
       {
         user: "{{user1}}",
+        text: "Mint a new NFT, The metadata is: name: Rare NFT Artwork, description: A unique NFT artwork minted on TON, image: https://example.com/nft-image.png, storage: off-chain, ipfsProvider: ipfs.io",
         content: {
           nftType: "standalone",
           collection: "EQC123CollectionAddress", // required for standalone NFTs

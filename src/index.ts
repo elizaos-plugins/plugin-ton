@@ -8,6 +8,10 @@ import getPoolInfoAction from "./actions/getPoolInfo.ts";
 import batchTransferAction from "./actions/batchTransfer.ts";
 import auctionAction from "./actions/auctionInteraction.ts";
 import { WalletProvider, nativeWalletProvider } from "./providers/wallet.ts";
+import transferNFTAction from "./actions/transferNFT.ts"
+import mintNFTAction from "./actions/mintNFT.ts"
+import getCollectionDataAction from "./actions/getCollectionData.ts"
+import updateNFTMetadataAction from "./actions/updateNFTMetadata.ts";
 import tokenPriceAction from "./actions/tokenPrice.ts";
 import { tonTokenPriceProvider } from "./providers/tokenProvider.ts";
 
@@ -53,7 +57,10 @@ export const tonPlugin: Plugin = {
     tonConnectTransactionAction,
     tokenPriceAction,
     auctionAction as Action,
-
+    transferNFTAction as Action,
+    mintNFTAction as Action,
+    updateNFTMetadataAction as Action,
+    getCollectionDataAction as Action,
   ],
   evaluators: [],
   providers: [nativeWalletProvider, nativeStakingProvider, tonConnectProvider,tonTokenPriceProvider],
