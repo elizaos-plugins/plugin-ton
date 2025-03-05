@@ -4,10 +4,10 @@ export * from "./stonFi";
 export type * from "./dex.d.ts";
 
 export enum SupportedMethod {
-  CREATE_POOL,
-  DEPOSIT,
-  WITHDRAW,
-  CLAIM_FEE,
+  CREATE_POOL = "CREATE_POOL",
+  DEPOSIT = "DEPOSIT",
+  WITHDRAW = "WITHDRAW",
+  CLAIM_FEE = "CLAIM_FEE",
 }
 export const SUPPORTED_DEXES = [
     "TORCH_FINANCE",

@@ -22,8 +22,7 @@ import { tonTokenPriceProvider } from "./providers/tokenProvider.ts";
 
 export { tokenPriceAction as GetTokenPrice };
 import { StakingProvider, nativeStakingProvider } from "./providers/staking.ts";
-import { create } from "handlebars";
-
+import dexAction from "./actions/dex.ts";
 export {
   WalletProvider,
   transferAction as TransferTonToken,
@@ -51,6 +50,7 @@ export { getCollectionDataAction as GetCollectionData ,
   mintNFTAction as MintNFT,
   transferNFTAction as TransferNFT,
 };
+export { dexAction as DexAction };
 
 export const tonPlugin: Plugin = {
   name: "ton",
@@ -79,6 +79,7 @@ export const tonPlugin: Plugin = {
     mintNFTAction as Action,
     updateNFTMetadataAction as Action,
     getCollectionDataAction as Action,
+    dexAction as Action,
   ],
   evaluators: [],
   providers: [
