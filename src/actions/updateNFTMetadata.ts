@@ -9,17 +9,17 @@ import {
   type HandlerCallback,
   Content,
 } from "@elizaos/core";
-import { Address, beginCell, internal, toNano } from "@ton/core";
+import { Address, beginCell, internal, toNano } from "@ton/ton";
 import { z } from "zod";
 import { initWalletProvider, WalletProvider } from "../providers/wallet";
-import { uploadFolderToIPFS, updateMetadataFiles, uploadJSONToIPFS, base64ToHex, waitSeqno } from "../utils/util";
+import { uploadFolderToIPFS, updateMetadataFiles, uploadJSONToIPFS, base64ToHex, waitSeqnoContract } from "../utils/util";
+import path from "path";
 
 /**
  * Extended interface for NFT metadata update content.
  * - nftAddress: The target NFT smart contract address.
  * - metadata: Partial NFT metadata update. All fields are optional, supporting partial edits.
- *   * storage: Option for metadata storage ("on-chain" or "off-chain").
- *   * ipfsProvider: Optional field (deprecated in favor of helia for off-chain uploads).
+ *   * storage: Option for metadata storage ("prompt" or "file").
  * Additionally, for on-chain updates, optional fields below enable crafting the new on-chain content:
  * - newCollectionMeta: The new collection metadata URL.
  * - newNftCommonMeta: The new NFT common metadata URL.
@@ -28,6 +28,8 @@ import { uploadFolderToIPFS, updateMetadataFiles, uploadJSONToIPFS, base64ToHex,
 export interface UpdateNFTMetadataContent extends Content {
   nftAddress: string;
   storage: "prompt" | "file";
+  imagesFolderPath?: string;
+  metadataFolderPath?: string;
   metadata?: {
     name?: string;
     description?: string;
@@ -47,41 +49,43 @@ export interface UpdateNFTMetadataContent extends Content {
 const updateNFTMetadataSchema = z.object({
   nftAddress: z.string().nonempty({ message: "NFT address is required" }),
   storage: z.enum(["prompt", "file"]).default("prompt"),
+  imagesFolderPath: z.string().optional(),
+  metadataFolderPath: z.string().optional(),
   metadata: z.object({
     name: z.string().optional(),
     description: z.string().optional(),
     image: z.string().optional(),
     content_url: z.string().optional(),
     attributes: z.array(z.any()).optional(),
-  }),
+  }).optional(),
   // New fields for on-chain update via custom message:
   newCollectionMeta: z.string().optional(),
   newNftCommonMeta: z.string().optional(),
+  royaltyPercent: z.number().optional(),
   royaltyAddress: z.string().optional(),
 });
 
 
 const updateNFTMetadataTemplate = `Respond with a JSON markdown block containing only the extracted values.
-Example response for NFT with metadata in prompt  :
+Example response for NFT with metadata in prompt:
 \`\`\`json
-    "collection": "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
-    "owner": "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
+{
+    "nftAddress": "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
     "storage": "prompt",
     "royaltyPercent": 0.05,
-    "royaltyAddress": "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4"
+    "royaltyAddress": "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
     "metadata": {
         "name": "Rare NFT Artwork",
         "description": "A unique NFT artwork minted on TON",
-        "image": "https://example.com/nft-image.png",
+        "image": "https://example.com/nft-image.png"
     }
 }
 \`\`\`
 
-Example response for collection NFT (new collection):
+Example response for file-based storage:
 \`\`\`json
 {
-    "collection": "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
-    "owner": "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
+    "nftAddress": "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
     "storage": "file",
     "imagesFolderPath": "path/to/images",
     "metadataFolderPath": "path/to/metadata",
@@ -94,19 +98,13 @@ Example response for collection NFT (new collection):
 
 Extract and output only the values as a JSON markdown block.`;
 
-function isUpdateNFTMetadataContent(content: UpdateNFTMetadataContent): boolean {
+function isUpdateNFTMetadataContent(content: Content): content is UpdateNFTMetadataContent {
   return (
-    typeof content.nftAddress === "string" &&
+    typeof content.nftAddress === "string" && 
     typeof content.storage === "string" &&
-    typeof content.metadata === "object" &&
-    typeof content.newCollectionMeta === "string" &&
-    typeof content.newNftCommonMeta === "string" &&
-    typeof content.royaltyAddress === "string" &&
-    typeof content.royaltyPercent === "number" &&
-    ((content.storage === "file" && content.imagesFolderPath && content.metadataFolderPath) || (content.storage === "prompt" && content.metadata)) 
-  ) as boolean;
+    (content.storage === "prompt" || content.storage === "file")
+  );
 }
- 
 
 /**
  * Builds the update details by composing the context using the updateNFTMetadataTemplate
@@ -133,120 +131,138 @@ const buildUpdateDetails = async (
 };
 
 /**
- * Crafts and sends an on-chain update transaction that changes the NFT's content.
- * The message follows the provided example:
- * - Opcode 4 indicates a "change content" operation.
- * - The message body stores a reference to a content cell (built from the new collection meta and NFT common meta)
- *   and a royalty cell.
- */
-async function updateNFTMetadataOnChain(
-  params: UpdateNFTMetadataContent
-): Promise<string> {
-  // Parse the NFT address.
-  const nftTonAddress = Address.parse(params.nftAddress);
-
-  // Build the collection metadata cell.
-  const collectionMetaCell = beginCell()
-    .storeUint(1, 8) // Indicates offchain metadata.
-    .storeStringTail(params.newCollectionMeta)
-    .endCell();
-
-  // Build the NFT common metadata cell.
-  const nftCommonMetaCell = beginCell()
-    .storeUint(1, 8)
-    .storeStringTail(params.newNftCommonMeta)
-    .endCell();
-
-  // Build the content cell which contains both references.
-  const contentCell = beginCell()
-    .storeRef(collectionMetaCell)
-    .storeRef(nftCommonMetaCell)
-    .endCell();
-
-  // Build the royalty cell.
-  const royaltyCell = beginCell()
-    .storeUint(params.royaltyPercent, 16) // factor (e.g., 5%).
-    .storeUint(100, 16) // base.
-    .storeAddress(Address.parse(params.royaltyAddress))
-    .endCell();
-
-  // Build the update message body using opcode 4.
-  const messageBody = beginCell()
-    .storeUint(4, 32) // Opcode for changing content.
-    .storeUint(0, 64) // Query id (0).
-    .storeRef(contentCell)
-    .storeRef(royaltyCell)
-    .endCell();
-
-  // Create the internal update message.
-  const updateMessage = internal({
-    to: nftTonAddress,
-    value: toNano("0.05"),
-    bounce: true,
-    body: messageBody,
-  });
-
-
-  const walletClient = this.walletProvider.getWalletClient();
-  const contract = walletClient.open(this.walletProvider.wallet);
-
-  const seqno: number = await contract.getSeqno();
-  const transfer = await contract.createTransfer({
-    seqno,
-    secretKey: this.walletProvider.keypair.secretKey,
-    messages: [updateMessage],
-  });
-  await contract.send(transfer);
-  console.log("Transaction sent, still waiting for confirmation...");
-
-  await waitSeqno(seqno, this.walletProvider.wallet);
-
-  const state = await walletClient.getContractState(
-      this.walletProvider.wallet.address,
-  );
-  const { lt: _, hash: lastHash } = state.lastTransaction;
-  return base64ToHex(lastHash);
-
-}
-
-/**
  * The UpdateNFTMetadataAction class processes metadata updates.
  */
 class UpdateNFTMetadataAction {
-  private readonly walletProvider: WalletProvider;
+  private walletProvider: WalletProvider;
 
   constructor(walletProvider: WalletProvider) {
     this.walletProvider = walletProvider;
   }
 
-  async update(params: UpdateNFTMetadataContent): Promise<string> {
-      let metadataIpfsHash: string;
-      let imagesIpfsHash: string;
-      // If off-chain storage is selected, upload metadata to IPFS and update content_url.
-      if (params.storage === "file") {
-        elizaLogger.log("Started uploading images to IPFS...");
-        imagesIpfsHash = await uploadFolderToIPFS(params.imagesFolderPath as string);
-        elizaLogger.log(
-          `Successfully uploaded the pictures to ipfs: https://gateway.pinata.cloud/ipfs/${imagesIpfsHash}`
-        );
-      
-        elizaLogger.log("Started uploading metadata files to IPFS...");
-        await updateMetadataFiles(params.metadataFolderPath as string, imagesIpfsHash);
-        metadataIpfsHash = await uploadFolderToIPFS(params.metadataFolderPath as string);
-        elizaLogger.log(
-          `Successfully uploaded the metadata to ipfs: https://gateway.pinata.cloud/ipfs/${metadataIpfsHash}`
-        );
-      } else if(params.storage === "prompt"){
-        if(!params.metadata) {
-          throw new Error("Metadata is required for prompt storage");
-        }
-        metadataIpfsHash = await uploadJSONToIPFS(params.metadata!);
-        params.newCollectionMeta = `ipfs://${metadataIpfsHash}/collection.json`;
-        params.newNftCommonMeta = `ipfs://${metadataIpfsHash}/`;
+  /**
+   * Uploads content to IPFS based on storage type
+   */
+  private async uploadContent(params: UpdateNFTMetadataContent): Promise<{ metadataIpfsHash: string, imagesIpfsHash?: string }> {
+    let metadataIpfsHash: string;
+    let imagesIpfsHash: string | undefined;
+    
+    if (params.storage === "file") {
+      if (!params.imagesFolderPath || !params.metadataFolderPath) {
+        throw new Error("Image and metadata folder paths are required for file storage");
       }
+      
+      elizaLogger.log("Started uploading images to IPFS...");
+      imagesIpfsHash = await uploadFolderToIPFS(params.imagesFolderPath);
+      elizaLogger.log(
+        `Successfully uploaded the pictures to ipfs: https://gateway.pinata.cloud/ipfs/${imagesIpfsHash}`
+      );
+    
+      elizaLogger.log("Started uploading metadata files to IPFS...");
+      await updateMetadataFiles(params.metadataFolderPath, imagesIpfsHash);
+      metadataIpfsHash = await uploadFolderToIPFS(params.metadataFolderPath);
+      elizaLogger.log(
+        `Successfully uploaded the metadata to ipfs: https://gateway.pinata.cloud/ipfs/${metadataIpfsHash}`
+      );
+      return { metadataIpfsHash, imagesIpfsHash };
+    } else if(params.storage === "prompt"){
+      if(!params.metadata) {
+        throw new Error("Metadata is required for prompt storage");
+      }
+      metadataIpfsHash = await uploadJSONToIPFS(params.metadata);
+      return { metadataIpfsHash };
+    }
+    
+    throw new Error("Invalid storage type");
+  }
 
-      const hash = await updateNFTMetadataOnChain(params); 
-      return hash;
+  /**
+   * Crafts and sends an on-chain update transaction that changes the NFT's content.
+   * The message follows the provided example:
+   * - Opcode 4 indicates a "change content" operation.
+   * - The message body stores a reference to a content cell (built from the new collection meta and NFT common meta)
+   *   and a royalty cell.
+   */
+  private async updateNFTMetadataOnChain(params: UpdateNFTMetadataContent): Promise<string> {
+    // Parse the NFT address.
+    const nftTonAddress = Address.parse(params.nftAddress);
+
+    // Build the collection metadata cell.
+    const collectionMetaCell = beginCell()
+      .storeUint(1, 8) // Indicates offchain metadata.
+      .storeStringTail(params.newCollectionMeta!)
+      .endCell();
+
+    // Build the NFT common metadata cell.
+    const nftCommonMetaCell = beginCell()
+      .storeUint(1, 8)
+      .storeStringTail(params.newNftCommonMeta!)
+      .endCell();
+
+    // Build the content cell which contains both references.
+    const contentCell = beginCell()
+      .storeRef(collectionMetaCell)
+      .storeRef(nftCommonMetaCell)
+      .endCell();
+
+    // Build the royalty cell.
+    const royaltyCell = beginCell()
+      .storeUint(params.royaltyPercent! * 100, 16) // factor (e.g., 5% = 500).
+      .storeUint(10000, 16) // base.
+      .storeAddress(Address.parse(params.royaltyAddress!))
+      .endCell();
+
+    // Build the update message body using opcode 4.
+    const messageBody = beginCell()
+      .storeUint(4, 32) // Opcode for changing content.
+      .storeUint(0, 64) // Query id (0).
+      .storeRef(contentCell)
+      .storeRef(royaltyCell)
+      .endCell();
+
+    // Create the internal update message.
+    const updateMessage = internal({
+      to: nftTonAddress,
+      value: toNano("0.05"),
+      bounce: true,
+      body: messageBody,
+    });
+
+    const walletClient = this.walletProvider.getWalletClient();
+    const contract = walletClient.open(this.walletProvider.wallet);
+
+    const seqno: number = await contract.getSeqno();
+    const transfer = await contract.createTransfer({
+      seqno,
+      secretKey: this.walletProvider.keypair.secretKey,
+      messages: [updateMessage],
+    });
+    
+    await contract.send(transfer);
+    elizaLogger.log("Transaction sent, waiting for confirmation...");
+
+    await waitSeqnoContract(seqno, contract);
+
+    const state = await walletClient.getContractState(
+        this.walletProvider.wallet.address,
+    );
+    const { lt: _, hash: lastHash } = state.lastTransaction;
+    return base64ToHex(lastHash);
+  }
+
+  async update(params: UpdateNFTMetadataContent): Promise<string> {
+    const { metadataIpfsHash } = await this.uploadContent(params);
+    
+    // Set the new metadata URLs if not already provided
+    if (!params.newCollectionMeta) {
+      params.newCollectionMeta = `ipfs://${metadataIpfsHash}/collection.json`;
+    }
+    
+    if (!params.newNftCommonMeta) {
+      params.newNftCommonMeta = `ipfs://${metadataIpfsHash}/`;
+    }
+
+    return await this.updateNFTMetadataOnChain(params);
   }
 }
 
@@ -268,17 +284,23 @@ export default {
 
     // Validate transfer content
     if (!isUpdateNFTMetadataContent(updateDetails)) {
-        console.error("Invalid content for UPDATE_NFT_METADATA action.");
-        if (callback) {
-            callback({
-                text: "Unable to process update request. Invalid content provided.",
-                content: { error: "Invalid update content" },
-            });
-        }
-        return false;
+      if (callback) {
+        callback({
+          text: "Unable to process update request. Invalid content provided.",
+          content: { error: "Invalid update content" },
+        });
+      }
+      return false;
     }
 
     try {
+      // Set default paths if using file storage
+      if (updateDetails.storage === "file") {
+        updateDetails.imagesFolderPath = runtime.getSetting("TON_NFT_IMAGES_FOLDER") || 
+          path.join(process.cwd(), "ton_nft_images");
+        updateDetails.metadataFolderPath = runtime.getSetting("TON_NFT_METADATA_FOLDER") || 
+          path.join(process.cwd(), "ton_nft_metadata");
+      }
 
       // Process the metadata update.
       const walletProvider = await initWalletProvider(runtime);
@@ -300,6 +322,7 @@ export default {
           content: result,
         });
       }
+      return true;
     } catch (error: any) {
       elizaLogger.error("Error updating NFT metadata:", error);
       if (callback) {
@@ -308,10 +331,11 @@ export default {
           content: { error: error.message },
         });
       }
+      return false;
     }
-    return true;
   },
   validate: async (_runtime: IAgentRuntime) => true,
+  template: updateNFTMetadataTemplate,
   examples: [
     [
       {
