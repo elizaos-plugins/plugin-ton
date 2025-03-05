@@ -50,35 +50,41 @@ export class NftItem {
     this.collectionAddress = Address.parse(collection);
   }
 
-  public createMintBody(params: MintParams): Cell {
-    const body = beginCell();
-    body.storeUint(1, 32);
-    body.storeUint(params.queryId || 0, 64);
-    body.storeUint(params.itemIndex, 64);
-    body.storeCoins(params.amount);
-    const nftItemContent = beginCell();
-    nftItemContent.storeAddress(params.itemOwnerAddress);
-    const uriContent = beginCell();
-    uriContent.storeBuffer(Buffer.from(params.commonContentUrl));
-    nftItemContent.storeRef(uriContent.endCell());
-    body.storeRef(nftItemContent.endCell());
-    return body.endCell();
-  }
+    public createMintBody(params: MintParams): Cell {
+        const body = beginCell();
+        body.storeUint(1, 32);
+        body.storeUint(params.queryId || 0, 64);
+        body.storeUint(params.itemIndex, 64);
+        body.storeCoins(params.amount);
+        const nftItemContent = beginCell();
+        nftItemContent.storeAddress(params.itemOwnerAddress);
+        const uriContent = beginCell();
+        uriContent.storeBuffer(Buffer.from(params.commonContentUrl));
+        nftItemContent.storeRef(uriContent.endCell());
+        body.storeRef(nftItemContent.endCell());
+        return body.endCell();
+    }
+  
+    public async deploy(
+      walletProvider: WalletProvider,
+      params: MintParams
+    ): Promise<number> {
 
-  public async deploy(wallet, params: MintParams): Promise<number> {
-    const seqno = await wallet.contract.getSeqno();
-    await wallet.contract.sendTransfer({
-      seqno,
-      secretKey: wallet.keyPair.secretKey,
-      messages: [
-        internal({
-          value: "0.05",
-          to: this.collectionAddress,
-          body: this.createMintBody(params),
-        }),
-      ],
-      sendMode: SendMode.IGNORE_ERRORS + SendMode.PAY_GAS_SEPARATELY,
-    });
-    return seqno;
+      const walletClient = walletProvider.getWalletClient();
+      const contract = walletClient.open(walletProvider.wallet);
+      const seqno = await contract.getSeqno();
+      await contract.sendTransfer({
+        seqno,
+        secretKey: walletProvider.keypair.secretKey,
+        messages: [
+          internal({
+            value: "0.05",
+            to: this.collectionAddress,
+            body: this.createMintBody(params),
+          }),
+        ],
+        sendMode: SendMode.IGNORE_ERRORS + SendMode.PAY_GAS_SEPARATELY,
+      });
+      return seqno;
+    }
   }
-}

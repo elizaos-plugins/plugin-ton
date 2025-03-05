@@ -26,6 +26,10 @@ This plugin provides functionality to:
 ![](./screenshot/connect.png "Connect with TonConnect QR Code")
 ![connection status](./screenshot/status.png "TonConnect Status")
 ![disconnect](./screenshot/disconnect.png "Disconnect")
+![nft transfer](./screenshot/nft-transfer.png "NFT Transfer")
+![nft mint](./screenshot/mint.png "NFT Mint")
+![nft collection data](./screenshot/get-colleciton-data.png "NFT Collection Data")
+
 ![lending](./screenshot/lending_info.png "Get lending info for TON")
 ![nft listing and cancellation](./screenshot/nft-listing-and-cancel.png "NFT Listing Creation and Cancellation")
 ![auction creation](./screenshot/nft-auctino.png "NFT Auction Creation")
@@ -187,6 +191,41 @@ import { AuctionInteractionActionTon } from "@elizaos/plugin-ton";
 const action = new AuctionInteractionActionTon(walletProvider);
 
 result = await auctionAction.getAuctionData(auctionAddress);
+```
+
+### Get Collection Data Action
+The `GetCollectionData` action shows information about NFT collection
+![collection-data](screenshot/get-colleciton-data.png.png)
+```typescript
+import { GetCollectionData } from "@elizaos/plugin-ton";
+
+// Initialize transfer action
+const getCollectionDataAction = new GetCollectionDataAction(walletProvider);
+const collectionData = await getCollectionDataAction.getData(collectionAddress);
+```
+
+### Mint NFT Action
+The `MintNFT` action is responsible for minting a new collection or NFT inside collection
+![mint-nft](screenshot/mint.png)
+```typescript
+import { MintNFT } from "@elizaos/plugin-ton";
+
+const mintNFTAction = new MintNFTAction(walletProvider);
+const nftAddress = await mintNFTAction.mint(mintParams);
+```
+
+### Transfer NFT Action
+The `transferNFTAction` action is responsible for transfering the ownership of an NFT within a collection
+![transfer-nft](screenshot/nft-ownership-transfer.png)
+```typescript
+import { TransferNFT } from "@elizaos/plugin-ton";
+
+const transferAction = new TransferNFTAction(walletProvider);
+const transferDetails = {
+  "nftAddress": "0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5",
+  "newOwner": "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4"
+};
+await transferAction.transfer(transferDetails);
 ```
 ## Development
 
