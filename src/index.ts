@@ -19,10 +19,10 @@ import getCollectionDataAction from "./actions/getCollectionData.ts"
 import updateNFTMetadataAction from "./actions/updateNFTMetadata.ts";
 import tokenPriceAction from "./actions/tokenPrice.ts";
 import { tonTokenPriceProvider } from "./providers/tokenProvider.ts";
-
+import jettonInteractionAction from "./actions/jettonInteraction.ts";
 export { tokenPriceAction as GetTokenPrice };
 import { StakingProvider, nativeStakingProvider } from "./providers/staking.ts";
-import { create } from "handlebars";
+
 
 export {
   WalletProvider,
@@ -51,7 +51,7 @@ export { getCollectionDataAction as GetCollectionData ,
   mintNFTAction as MintNFT,
   transferNFTAction as TransferNFT,
 };
-
+export { jettonInteractionAction as JettonInteractionActionTon };
 export const tonPlugin: Plugin = {
   name: "ton",
   description: "Ton Plugin for Eliza",
@@ -79,6 +79,7 @@ export const tonPlugin: Plugin = {
     mintNFTAction as Action,
     updateNFTMetadataAction as Action,
     getCollectionDataAction as Action,
+    jettonInteractionAction as Action,
   ],
   evaluators: [],
   providers: [
