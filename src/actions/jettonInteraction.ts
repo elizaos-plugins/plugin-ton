@@ -21,8 +21,9 @@ import { parseTokenMetadataCell } from "../utils/JettonMinterUtils";
  *
  * - jettonMinterAddress: The jetton minter contract address.
  * - jettonWalletAddress: The jetton wallet contract address.
+ * - jettonMasterAddress: The jetton master contract address.
+ * - ownerAddress: The owner's address.
  * - jettonAction: One of "deployMinter", "mint", "burn", "transfer", "getJettonData", "getWalletData", "changeOwner".
- * - senderAddress: For actions that send an internal message; represents the caller's address.
  * - amount: For mint/burn/transfer actions, the amount of jettons as a string.
  * - recipientAddress: For transfer action, the recipient's address. For mint/burn/transfer actions, the address to receive notifications.
  * - metadata: For deployMinter action, the metadata for the jetton.
@@ -44,7 +45,6 @@ const jettonInteractionSchema = z
       "getWalletData",
       "changeOwner",
     ]),
-    senderAddress: z.string().optional().nullable(),
     amount: z.string().optional().nullable(),
     recipientAddress: z.string().optional().nullable(),
     metadata: z.record(z.string()).optional().nullable(),
@@ -92,7 +92,6 @@ export interface JettonInteractionContent extends Content {
     | "getJettonData"
     | "getWalletData"
     | "changeOwner";
-  senderAddress?: string;
   amount?: string;
   recipientAddress?: string;
   metadata?: Record<string, string>;
@@ -107,7 +106,6 @@ function isJettonInteractionContent(
         content.jettonAction && typeof content.jettonAction === "string" ||
         content.jettonWalletAddress && typeof content.jettonWalletAddress === "string" ||
         content.ownerAddress && typeof content.ownerAddress === "string" ||
-        content.senderAddress && typeof content.senderAddress === "string" ||
         content.amount && typeof content.amount === "string" ||
         content.recipientAddress && typeof content.recipientAddress === "string" ||
         content.metadata && typeof content.metadata === "object" ||
@@ -169,8 +167,7 @@ Example response:
   "jettonAction": "<deployMinter|mint|burn|transfer|getJettonData|getWalletData|changeOwner>",
   "jettonMinterAddress": "<Jetton Minter contract address> (required for mint, burn, transfer, getJettonData, getWalletData, changeOwner)",
   "jettonMasterAddress": "<Jetton Master contract address> (required for transfer)",
-  "jettonWalletAddress": "<Jetton Wallet contract address> (optional for burn)",
-  "senderAddress": "<Sender's TON address, required for actions other than 'getJettonData'>",
+  "jettonWalletAddress": "<Jetton Wallet contract address> (required for getWalletData)",
   "amount": "<Amount of jettons to mint/burn/transfer>",
   "recipientAddress": "<Recipient's TON address> (required transfer, optional for mint, burn)",
   "metadata": "<Metadata for the jetton> (required for deployMinter)",
