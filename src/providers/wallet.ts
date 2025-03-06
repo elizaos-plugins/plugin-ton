@@ -24,8 +24,8 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 
 const PROVIDER_CONFIG = {
-    MAINNET_RPC: "https://toncenter.com/api/v2/jsonRPC",
-    RPC_API_KEY: "",
+    MAINNET_RPC: process.env.TON_RPC_URL ?? "https://toncenter.com/api/v2/jsonRPC",
+    RPC_API_KEY: process.env.TON_RPC_API_KEY ?? "",
     STONFI_TON_USD_POOL: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4",
     CHAIN_NAME_IN_DEXSCREENER: "ton",
     // USD_DECIMAL=10^6
@@ -295,7 +295,7 @@ export class WalletProvider {
             return null;
         }
     }
-    
+
     /**
      * Generates a new wallet on demand.
      * Returns the WalletProvider instance along with the mnemonic (for backup).
@@ -385,7 +385,7 @@ export const initWalletProvider = async (runtime: IAgentRuntime) => {
     if (!privateKey) {
         throw new Error(`${CONFIG_KEYS.TON_PRIVATE_KEY} is missing`);
     }
-    
+
     const mnemonics = privateKey.split(" ");
     if (mnemonics.length < 2) {
         throw new Error(`${CONFIG_KEYS.TON_PRIVATE_KEY} mnemonic seems invalid`);

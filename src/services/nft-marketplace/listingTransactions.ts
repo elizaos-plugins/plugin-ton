@@ -1,11 +1,11 @@
-import { beginCell, internal, SendMode, toNano } from "@ton/core";
-import { 
-  getBuyPrice, 
-  getListingData, 
-  getMinBid, 
-  getNextValidBidAmount, 
-  isAuction, 
-  isAuctionEnded 
+import { beginCell, internal, SendMode, toNano } from "@ton/ton";
+import {
+  getBuyPrice,
+  getListingData,
+  getMinBid,
+  getNextValidBidAmount,
+  isAuction,
+  isAuctionEnded
 } from "./listingData";
 import { waitSeqnoContract } from "../../utils/util";
 import { WalletProvider } from "../../providers/wallet";
@@ -60,7 +60,7 @@ export async function cancelListing(
 ): Promise<any> {
   try {
     const listingData = await getListingData(walletProvider, nftAddress);
-    
+
     // Opcode for cancellation
     const opcode = listingData.isAuction ? 1 : 3; // 1 for auction, 3 for fixed price
 
@@ -105,20 +105,20 @@ export async function bidOnAuction(
 ): Promise<any> {
   try {
     const listingData = await getListingData(walletProvider, nftAddress);
-    
+
     if (!listingData.isAuction) {
       throw new Error("Cannot bid on a fixed-price listing. Use buyListing instead.");
     }
-    
+
     // Check if auction has ended
     const auctionEnded = await isAuctionEnded(walletProvider, nftAddress);
     if (auctionEnded) {
       throw new Error("Auction has already ended.");
     }
-    
+
     // If no bidAmount provided, get the next valid bid amount
     const bid = bidAmount;
-    
+
     // Check if bid is valid
     const minBid = await getMinBid(walletProvider, nftAddress);
     if (bid < minBid) {
@@ -134,7 +134,7 @@ export async function bidOnAuction(
     const contract = client.open(walletProvider.wallet);
 
     const seqno = await contract.getSeqno();
-    
+
     const transferMessage = internal({
       to: listingData.listingAddress,
       value: amountToSend,

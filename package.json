@@ -1,5 +1,5 @@
 {
-	"name": "@elizaos/plugin-ton",
+	"name": "@elizaos-plugins/plugin-ton",
 	"version": "0.1.9",
 	"type": "module",
 	"main": "dist/index.js",
@@ -21,10 +21,13 @@
 	"dependencies": {
 		"@elizaos/core": "workspace:*",
 		"@evaafi/sdk": "latest",
+        "@pinata/sdk": "^2.1.0",
 		"@ton/crypto": "3.3.0",
 		"@ton/ton": "15.1.0",
+        "@tonconnect/sdk": "^3.0.6",
 		"bignumber.js": "9.1.2",
 		"node-cache": "5.1.2",
+        "qrcode": "^1.5.4",
 		"tsup": "8.3.5"
 	},
 	"devDependencies": {

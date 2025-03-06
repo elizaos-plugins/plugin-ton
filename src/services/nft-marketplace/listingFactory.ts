@@ -6,7 +6,7 @@ import {
   storeStateInit,
   toNano,
   TupleReader,
-} from "@ton/core";
+} from "@ton/ton";
 
 export interface NftFixPriceSaleV4DR1Data {
   isComplete: boolean;

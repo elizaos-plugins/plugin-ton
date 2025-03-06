@@ -1,18 +1,16 @@
 
-
-> @elizaos/plugin-ton@0.1.8+build.1 build /Users/a/eliza-wrangler/packages/plugin-ton
+
+> @elizaos-plugins/plugin-ton@0.1.9 build /home/sekmet/DEVELOPMENT/AI/ELIZA/TON-MOD/eliza-r3/packages/plugin-ton
 > tsup --format esm --dts
 
 [34mCLI[39m Building entry: src/index.ts
 [34mCLI[39m Using tsconfig: tsconfig.json
 [34mCLI[39m tsup v8.3.5
-[34mCLI[39m Using tsup config: /Users/a/eliza-wrangler/packages/plugin-ton/tsup.config.ts
+[34mCLI[39m Using tsup config: /home/sekmet/DEVELOPMENT/AI/ELIZA/TON-MOD/eliza-r3/packages/plugin-ton/tsup.config.ts
 [34mCLI[39m Target: esnext
 [34mCLI[39m Cleaning output folder
 [34mESM[39m Build start
-[32mESM[39m [1mdist/index.js     [22m[32m126.64 KB[39m
-[32mESM[39m [1mdist/index.js.map [22m[32m258.80 KB[39m
-[32mESM[39m ⚡️ Build success in 58ms
+[32mESM[39m [1mdist/index.js     [22m[32m424.92 KB[39m
+[32mESM[39m [1mdist/index.js.map [22m[32m859.00 KB[39m
+[32mESM[39m ⚡️ Build success in 203ms
 DTS Build start
-DTS ⚡️ Build success in 4321ms
-DTS dist/index.d.ts 1.59 KB

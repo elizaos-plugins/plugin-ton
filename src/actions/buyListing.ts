@@ -9,13 +9,13 @@ import {
     type HandlerCallback,
     Content,
   } from "@elizaos/core";
-  import { Address, internal, SendMode, toNano } from "@ton/core";
+  import { Address, internal, SendMode, toNano } from "@ton/ton";
   import { z } from "zod";
   import { initWalletProvider, WalletProvider } from "../providers/wallet";
   import { waitSeqnoContract } from "../utils/util";
 import { getBuyPrice, getListingData } from "../services/nft-marketplace/listingData";
 import { buyListing } from "../services/nft-marketplace/listingTransactions";
-  
+
   /**
    * Schema for buy listing input.
    * Only requires:
@@ -32,17 +32,17 @@ import { buyListing } from "../services/nft-marketplace/listingTransactions";
         path: ["nftAddress"],
       }
     );
-  
+
   export interface BuyListingContent extends Content {
     nftAddress: string;
   }
-  
+
   function isBuyListingContent(
     content: Content
   ): content is BuyListingContent {
     return typeof content.nftAddress === "string";
   }
-  
+
   const buyListingTemplate = `Respond with a JSON markdown block containing only the extracted values.
   Example response:
   \`\`\`json
@@ -50,11 +50,11 @@ import { buyListing } from "../services/nft-marketplace/listingTransactions";
     "nftAddress": "<NFT address to buy>"
   }
   \`\`\`
-  
+
   {{recentMessages}}
-  
+
   Respond with a JSON markdown block containing only the extracted values.`;
-  
+
   /**
    * Helper function to build buy listing parameters.
    */
@@ -75,7 +75,7 @@ import { buyListing } from "../services/nft-marketplace/listingTransactions";
     });
     return content.object as any;
   };
-  
+
   /**
    * BuyListingAction encapsulates the logic to buy an NFT listing.
    */
@@ -84,16 +84,16 @@ import { buyListing } from "../services/nft-marketplace/listingTransactions";
     constructor(walletProvider: WalletProvider) {
       this.walletProvider = walletProvider;
     }
-  
+
     /**
      * Buys an NFT listing
      */
     async buy(nftAddress: string): Promise<any> {
       try {
         elizaLogger.log(`Starting purchase of NFT: ${nftAddress}`);
-        
+
         const receipt = await buyListing(this.walletProvider, nftAddress);
-        
+
         return receipt;
       } catch (error) {
         elizaLogger.error(`Error buying NFT ${nftAddress}: ${error}`);
@@ -101,7 +101,7 @@ import { buyListing } from "../services/nft-marketplace/listingTransactions";
       }
     }
   }
-  
+
   export default {
     name: "BUY_LISTING",
     similes: ["NFT_BUY", "PURCHASE_NFT", "BUY_NFT"],
@@ -116,7 +116,7 @@ import { buyListing } from "../services/nft-marketplace/listingTransactions";
     ) => {
       elizaLogger.log("Starting BUY_LISTING handler...");
       const params = await buildBuyListingData(runtime, message, state);
-  
+
       if (!isBuyListingContent(params)) {
         if (callback) {
           callback({
@@ -126,13 +126,13 @@ import { buyListing } from "../services/nft-marketplace/listingTransactions";
         }
         return false;
       }
-  
+
       try {
         const walletProvider = await initWalletProvider(runtime);
         const buyListingAction = new BuyListingAction(walletProvider);
-        
+
         const result = await buyListingAction.buy(params.nftAddress);
-        
+
         if (callback) {
           callback({
             text: JSON.stringify(result, null, 2),

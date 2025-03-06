@@ -1,4 +1,4 @@
-import { Address, TupleReader } from "@ton/core";
+import { Address, TupleReader } from "@ton/ton";
 
 interface BaseListingData {
   listingAddress: Address;

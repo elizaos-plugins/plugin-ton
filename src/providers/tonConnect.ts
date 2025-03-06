@@ -363,6 +363,12 @@ export const tonConnectProvider: Provider = {
         message: Memory,
         state?: State
     ): Promise<ConnectorStatus | string> {
+
+        // exit if TONCONNECT is not used
+        if (!runtime.getSetting(CONFIG_KEYS.TON_MANIFEST_URL)) {
+            return "TONCONNECT is not enabled.";
+        }
+
         try {
             const provider = await initTonConnectProvider(runtime);
             return provider.formatConnectionStatus(runtime);
