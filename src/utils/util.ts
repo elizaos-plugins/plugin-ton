@@ -4,6 +4,7 @@ import pinataSDK from "@pinata/sdk";
 import { readdirSync } from "fs";
 import { writeFile, readFile } from "fs/promises";
 import path from "path";
+import { WalletProvider } from "../providers/wallet";
 // import { MintParams } from "./NFTCollection";
 export const sleep = async (ms: number) => {
     await new Promise((resolve) => setTimeout(resolve, ms));
@@ -102,18 +103,29 @@ export async function uploadJSONToIPFS(json: any): Promise<string> {
   return response.IpfsHash;
 }
 
+export function formatCurrency(amount: string, digits: number): string {
+  try {
+      return parseFloat(amount).toFixed(digits).toString();
+  } catch (e) {
+      return "0";
+  }
+};
+
+
 export async function topUpBalance(  
-    wallet,
+    walletProvider: WalletProvider,
     nftAmount: number,
     collectionAddress: string
   ): Promise<number> {
     const feeAmount = 0.026 // approximate value of fees for 1 transaction in our case 
-    const seqno = await wallet.contract.getSeqno();
+    const walletClient = walletProvider.getWalletClient();
+    const contract = walletClient.open(walletProvider.wallet);
+    const seqno = await contract.getSeqno();
     const amount = nftAmount * feeAmount;
 
-    await wallet.contract.sendTransfer({
+    await contract.sendTransfer({
       seqno,
-      secretKey: wallet.keyPair.secretKey,
+      secretKey: walletProvider.keypair.secretKey,
       messages: [
         internal({
           value: amount.toString(),
@@ -153,4 +165,3 @@ export async function topUpBalance(
         return null; // Return null if the address is invalid
     }
 }
-

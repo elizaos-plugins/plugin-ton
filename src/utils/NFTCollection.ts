@@ -1,6 +1,6 @@
 import { beginCell, Address, Cell, internal, contractAddress, SendMode, StateInit } from "@ton/ton";
 import { encodeOffChainContent } from "./util";
-
+import { WalletProvider } from "../providers/wallet";
 export type CollectionData = {
     ownerAddress: Address;
     royaltyPercent: number;
@@ -74,11 +74,13 @@ export class NFTCollection {
     return contractAddress(0, this.stateInit);
   }
 
-  public async deploy(wallet) {
-    const seqno = await wallet.contract.getSeqno();
-    await wallet.contract.sendTransfer({
+  public async deploy(walletProvider: WalletProvider) {
+    const walletClient = walletProvider.getWalletClient();
+    const contract = walletClient.open(walletProvider.wallet);
+    const seqno = await contract.getSeqno();
+    await contract.sendTransfer({
       seqno,
-      secretKey: wallet.keyPair.secretKey,
+      secretKey: walletProvider.keypair.secretKey,
       messages: [
         internal({
           value: "0.05",

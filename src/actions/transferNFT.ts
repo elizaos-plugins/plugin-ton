@@ -9,10 +9,10 @@ import {
   generateObject,
   ModelClass,
 } from "@elizaos/core";
-import { Address, beginCell, Cell, internal, storeMessageRelaxed, toNano } from "@ton/core";
+import { Address, beginCell, Cell, internal, toNano } from "@ton/ton";
 import { z } from "zod";
 import { initWalletProvider, type WalletProvider } from "../providers/wallet";
-import { base64ToHex, sleep } from "../utils/util";
+import { base64ToHex, waitSeqnoContract } from "../utils/util";
 
 export interface TransferNFTContent extends Content {
     nftAddress: string;
@@ -53,11 +53,6 @@ Example:
 
 Extract and output only the values as a JSON markdown block.`;
 
-// Add interface for contract methods
-interface TonWalletContract {
-    getSeqno: () => Promise<number>;
-}
-
 /**
  * The TransferNFTAction class encapsulates the logic for transferring NFT ownership.
  */
@@ -94,66 +89,52 @@ class TransferNFTAction {
     elizaLogger.log(
         `[Plugin-TON] Transferring: ${params.nftAddress} to (${params.newOwner})`,
     );
-    // { recipient: 'xx', amount: '0\\.3'}
 
     const walletClient = this.walletProvider.getWalletClient();
     const contract = walletClient.open(this.walletProvider.wallet);
 
-        try {
-            // Parse the NFT smart contract address.
-            const nftAddressParsed = Address.parse(params.nftAddress);
+    try {
+      // Parse the NFT smart contract address.
+      const nftAddressParsed = Address.parse(params.nftAddress);
 
-            // Parse the new owner and authorized wallet addresses.
-            const newOwnerAddress = Address.parse(params.newOwner);
+      // Parse the new owner and authorized wallet addresses.
+      const newOwnerAddress = Address.parse(params.newOwner);
 
-            // Create a transfer
-            const seqno: number = await contract.getSeqno();
-            await sleep(1500);
-            const transfer = contract.createTransfer({
-                seqno,
-                secretKey: this.walletProvider.keypair.secretKey,
-                messages: [
-                  internal({
-                    value: "0.05",
-                    to: nftAddressParsed,
-                    body: this.createTransferBody({
-                      newOwner: newOwnerAddress,
-                      responseTo: contract.address,
-                      forwardAmount: toNano("0.02"),
-                    }),
-                  }),
-                ],
-            });
-            await sleep(1500);
-            await contract.send(transfer);
-            console.log("Transaction sent, still waiting for confirmation...");
-            await sleep(1500);
-            // this.waitForTransaction(seqno, contract);
-            const state = await walletClient.getContractState(
-                this.walletProvider.wallet.address,
-            );
-            console.log("Transaction sent, still waiting for confirmation...");
-            const { lt: _, hash: lastHash } = state.lastTransaction;
-            return base64ToHex(lastHash);
-        } catch (error) {
-            throw new Error(`Transfer failed: ${error.message}`);
-        }
+      // Create a transfer
+      const seqno: number = await contract.getSeqno();
+      
+      const transfer = contract.createTransfer({
+          seqno,
+          secretKey: this.walletProvider.keypair.secretKey,
+          messages: [
+            internal({
+              value: "0.05",
+              to: nftAddressParsed,
+              body: this.createTransferBody({
+                newOwner: newOwnerAddress,
+                responseTo: contract.address,
+                forwardAmount: toNano("0.02"),
+              }),
+            }),
+          ],
+      });
+      
+      await contract.send(transfer);
+      elizaLogger.log("Transaction sent, waiting for confirmation...");
+      
+      // Wait for transaction confirmation using waitSeqnoContract
+      await waitSeqnoContract(seqno, contract);
+      
+      const state = await walletClient.getContractState(
+          this.walletProvider.wallet.address,
+      );
+      
+      const { lt: _, hash: lastHash } = state.lastTransaction;
+      return base64ToHex(lastHash);
+    } catch (error) {
+      throw new Error(`Transfer failed: ${error.message}`);
     }
-
-    async waitForTransaction(seqno: number, contract: TonWalletContract) {
-        let currentSeqno = seqno;
-        const startTime = Date.now();
-        const TIMEOUT = 120000; // 2 minutes
-
-        while (currentSeqno === seqno) {
-            if (Date.now() - startTime > TIMEOUT) {
-                throw new Error(`Transaction confirmation timed out after ${TIMEOUT} minutes`);
-            }
-            await sleep(2000);
-            currentSeqno = await contract.getSeqno();
-        }
-        console.log("transaction confirmed!");
-    }
+  }
 }
 
 const buildTransferNFTContent = async (
@@ -220,7 +201,6 @@ export default {
 
     // Validate transfer content
     if (!isTransferNFTContent(transferDetails)) {
-        console.error("Invalid content for TRANSFER_NFT action.");
         if (callback) {
             callback({
                 text: "Unable to process transfer request. Invalid content provided.",
@@ -234,9 +214,25 @@ export default {
       const walletProvider = await initWalletProvider(runtime);
       // Fetch the current NFT owner via get_nft_data.
       const result = await walletProvider.getWalletClient().runMethod(Address.parse(transferDetails.nftAddress), "get_nft_data");
-      // Read the owner address from the contract (assumes owner_address is the third stack element).
-      //TODO: perhaps we need to read from the stack multiple times if the owner address is on the third stack element
-      const currentOwnerAddress = result.stack.readAddress()?.toString();
+
+      // Custom serializer for BigInt values
+      const safeStringify = (obj: any) => {
+        return JSON.stringify(obj, (_, value) => 
+          typeof value === 'bigint' ? value.toString() : value
+        );
+      };
+
+      elizaLogger.log(`NFT data result: ${safeStringify(result)}`);
+
+      // Read the elements from the stack in order
+      const init = result.stack.readNumber();           // Read the init flag (1st element)
+      const index = result.stack.readNumber();          // Read the index (2nd element)
+      const collectionAddress = result.stack.readAddress(); // Read collection address (3rd element)
+      const ownerAddress = result.stack.readAddress();  // Read owner address (4th element)
+
+      // Now we have the owner address
+      const currentOwnerAddress = ownerAddress?.toString();
+      elizaLogger.log(`Current NFT owner: ${currentOwnerAddress}`);
       if (!currentOwnerAddress) {
         throw new Error("Could not retrieve current NFT owner address.");
       }
@@ -281,6 +277,7 @@ export default {
     [
       {
         user: "{{user1}}",
+        text: "Transfer NFT with address {{nftAddress}} from {{user1}} to {{user2}}",
         content: {
           nftAddress: "NFT_123456789",
           newOwner: "EQNewOwnerAddressExample",
