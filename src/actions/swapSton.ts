@@ -35,7 +35,6 @@ export interface ISwapContent extends Content {
 }
 
 function isSwapContent(content: Content): content is ISwapContent {
-    console.log("Content for swap", content);
     return (
         typeof content.tokenIn === "string" &&
         typeof content.tokenOut === "string" &&
@@ -96,17 +95,14 @@ export class SwapAction {
             });
             if (swapStatus["@type"] === "Found") {
                 if (swapStatus.exitCode === "swap_ok") {
-                    console.log("Swap successful");
                     return swapStatus;
                 } else {
-                    console.log("Swap failed");
                     throw new Error("Swap failed");
                 }
             }
 
             waitingSteps++;
             if (waitingSteps > this.stonProvider.SWAP_WAITING_STEPS) {
-                console.log("Swap failed");
                 throw new Error("Swap failed");
             }
         }
@@ -131,7 +127,6 @@ export class SwapAction {
                 description = tx?.description as TransactionDescriptionGeneric;
                 if ((description.computePhase?.type === 'vm' && description.actionPhase?.success === true && description.actionPhase?.success)
                     || (description.computePhase?.type !== 'vm' && description.actionPhase?.success)) {
-                    console.log("Transaction successful");
                     return hash;
                 } else {
                     prevHash = hash;
@@ -141,20 +136,16 @@ export class SwapAction {
             }
             waitingSteps += 1;
             if (waitingSteps > this.stonProvider.TX_WAITING_STEPS) {
-                console.log("Transaction failed and no more retries received");
                 if (description?.computePhase?.type === 'vm' && description?.actionPhase?.success === true) {
-                    console.log("Compute phase error");
-                    throw new Error("Compute phase error");
+                    throw new Error("Transaction failed and no more retries received. Compute phase error");
                 }
-                if (description?.actionPhase?.valid) {
-                    console.log("Invalid transaction");
-                    throw new Error("Invalid transaction");
+                if (!description?.actionPhase?.valid) {
+                    throw new Error("Transaction failed and no more retries received. Invalid transaction");
                 }
                 if (description?.actionPhase?.noFunds) {
-                    console.log("No funds");
-                    throw new Error("No funds");
+                    throw new Error("Transaction failed and no more retries received. No funds");
                 }
-                throw new Error("Transaction failed");
+                throw new Error("Transaction failed and no more retries received");
             }
         }
     }
@@ -182,7 +173,7 @@ export class SwapAction {
                     proxyTon: this.proxyTon,
                     offerAmount: toNano(amountIn),
                     askJettonAddress: outAsset.contractAddress,
-                    
+
                     minAskAmount: "1",
                     queryId: this.queryId,
                 }
@@ -267,14 +258,14 @@ const buildSwapDetails = async (
 
 export default {
     name: "SWAP_STON",
-    similes: ["SWAP_TOKEN", "SWAP_TOKENS", "TOKEN_SWAP", "TRADE_TOKENS", "EXCHANGE_TOKENS"],
+    similes: ["SWAP_TOKEN_STON", "SWAP_TOKENS_STON", "TOKEN_SWAP_STON", "TRADE_TOKENS_STON", "EXCHANGE_TOKENS_STON"],
     template: swapTemplate,
     validate: async (runtime: IAgentRuntime, message: Memory) => {
         elizaLogger.log("Validating config for user:", message.userId);
         await validateEnvConfig(runtime);
         return true;
     },
-    description: "Swap tokens through STON.fi DEX",
+    description: "Swap tokens in TON blockchain through STON.fi DEX",
     //suppressInitialMessage: true,
     handler: async (
         runtime: IAgentRuntime,
@@ -313,11 +304,11 @@ export default {
             elizaLogger.success(`Successfully swapped ${swapContent.amountIn} ${swapContent.tokenIn} for ${fromNano(amountOut)} ${swapContent.tokenOut}, Transaction: ${txHash}`);
 
             const template = `
-            # Task: generate dialog for the character {{agentName}} to communicate {{user1}} that the swap was successful.
+            # Task: generate a dialog line from the character {{agentName}} to communicate {{user1}} that the swap was successful.
             Avoid adding initial and final quotes.
-            The dialog should be only one message and contain al the information of the swap : 
+            The dialog line should be only one message and include the following information of the swap : 
             - amountIn ${swapContent.amountIn}
-            - amountOut ${fromNano(amountOut)}
+            - amountOut ${fromNano(amountOut)}, only if not zero, if zero indicate that in testnet the swap information is not retrieved
             - tokenIn ${swapContent.tokenIn}
             - tokenOut ${swapContent.tokenOut}
             - hash ${txHash}
@@ -348,8 +339,8 @@ export default {
             elizaLogger.error("Error during token swap:", error);
 
             const template = `
-            # Task: generate dialog for the character {{agentName}} to communicate {{user1}} that the swap failed due to ${error.message}.
-            The dialog should be only one message and contain al the information of the error.
+            # Task: generate a dialog line from the character {{agentName}} to communicate {{user1}} that the swap failed due to ${error.message}.
+            The dialog line should be only one message and contain al the information of the error.
             Avoid adding initial and final quotes.
             `;
 

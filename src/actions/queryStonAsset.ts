@@ -28,7 +28,6 @@ export interface IQueryAssetContent extends Content {
 }
 
 function isQueryAssetContent(content: Content): content is IQueryAssetContent {
-    console.log("Content for query asset", content);
     return (
         typeof content.token === "string"
     );
@@ -106,7 +105,7 @@ export default {
         await validateEnvConfig(runtime);
         return true;
     },
-    description: "Query information about a token in STON.fi DEX",
+    description: "Query information about a token in the TON blockchain through STON.fi DEX",
     handler: async (
         runtime: IAgentRuntime,
         message: Memory,
@@ -136,16 +135,16 @@ export default {
             elizaLogger.success(`Successfully queried ${queryAssetContent.token} in STON DEX`);
 
             const template = `
-            # Task: generate dialog for the character {{agentName}} to communicate {{user1}} that the query was successful.
+            # Task: generate a dialog line from {{agentName}} to communicate {{user1}} that the query of the token ${queryAssetContent.token} was successful.
             Avoid adding initial and final quotes.
-            The dialog should be only one message and contain al the information of the atributes of the token ${queryAssetContent.token}:
-            - dexPriceUsd ${token.dexPriceUsd} USD
-            - popularityIndex ${token.popularityIndex}
-            - blacklisted ${token.blacklisted}
-            - deprecated ${token.deprecated}
-            - displayName ${token.displayName}
-            - contractAddress ${token.contractAddress}
-            - liquidity ${token.tags.filter(tag => tag.startsWith('asset:liquidity:') || tag.includes('_liquidity'))
+            The dialog line should be only one message and include the following information of the token:
+            - price in USD ${token.dexPriceUsd} USD
+            - popularity index ${token.popularityIndex}
+            - is blacklisted? ${token.blacklisted}
+            - is deprecated? ${token.deprecated}
+            - display name ${token.displayName}
+            - contract address ${token.contractAddress}
+            - liquidity of the token ${token.tags.filter(tag => tag.startsWith('asset:liquidity:') || tag.includes('_liquidity'))
                     .map(tag => tag.replace('asset:liquidity:', '').replace('_liquidity', '').replace('_', ' '))[0]}
             - is popular? ${token.tags.includes('asset:popular')}
             `;
@@ -179,8 +178,8 @@ export default {
             elizaLogger.error("Error during token query: ", error);
 
             const template = `
-            # Task: generate dialog for the character {{agentName}} to communicate {{user1}} that the query failed due to ${error.message}.
-            The dialog should be only one message and contain al the information of the error.
+            # Task: generate a dialog line from the character {{agentName}} to communicate {{user1}} that the query failed due to ${error.message}.
+            The dialog line should be only one message and contain al the information of the error.
             Avoid adding initial and final quotes.
             `;
 
