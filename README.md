@@ -16,6 +16,8 @@ This plugin provides functionality to:
 - Query wallet connection status
 - Support multiple wallet applications (like Tonkeeper)
 - Support QR Code scanning connection
+- Query information for assets from Ston.fi DEX
+- Swap tokens using Ston.fi DEX
 
 ### Screenshot
 
@@ -62,11 +64,20 @@ npm install @elizaos/plugin-ton
 The plugin requires the following environment variables:
 
 ```env
-TON_PRIVATE_KEY=your_mnemonic_phrase  # Required - wallet mnemonic words
-TON_RPC_URL=your_rpc_endpoint  # Optional - defaults to mainnet RPC
-TON_RPC_API_KEY=
+# Ton
+TON_PRIVATE_KEY= # Ton Mnemonic Seed Phrase Join With " "(single space) String
+TON_RPC_URL=     # ton rpc - Defaults to https://toncenter.com/api/v2/jsonRPC
+TON_RPC_API_KEY= # ton rpc api key
 TON_MANIFEST_URL=your_manifest_url  # Required - TonConnect manifest URL
 TON_BRIDGE_URL=your_bridge_url  # Optional - defaults to https://bridge.tonapi.io/bridge
+
+# STON.fi - Values are not required, they allow using newer versions of STON.fi DEX
+# Identifies mainnet / testnet from TON_RPC_URL
+STON_API_BASE_URL= # By default, uses null value (i.e. standard STON value)
+STON_ROUTER_VERSION= # By default, uses v1 for mainnet and v2_1 for testnet
+STON_ROUTER_ADDRESS= # By default, uses standard values
+STON_PROXY_VERSION= # By default, uses v1 for mainnet and v2_1 for testnet
+STON_PROXY_ADDRESS= # By default, uses standard values
 ```
 
 ## Usage
@@ -139,28 +150,30 @@ const hash = await action.transfer({
 ```
 
 ### BatchTransferAction
+
 The `BatchTransferAction` handles transfers of NFTs, Jettons and TON in a single transaction:
 ![batch-transfer-image](images/Screenshot-batch-transfer.png)
+
 ```typescript
 import { BatchTransferTokens } from "@elizaos/plugin-ton";
 
 // Initialize transfer action
 const action = new BatchTransferTokens(walletProvider);
 const batchTransfers = {
-    transfers: [
-        {
-            type: "ton",
-            recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
-            amount: "0.1"
-        },
-        {
-            type: "token",
-            recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
-            tokenInd: "0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5",
-            amount: "1"
-        }
-    ]
-}
+  transfers: [
+    {
+      type: "ton",
+      recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
+      amount: "0.1",
+    },
+    {
+      type: "token",
+      recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
+      tokenInd: "0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5",
+      amount: "1",
+    },
+  ],
+};
 const reports = await batchTransferAction.createBatchTransfer(batchTransfers);
 ```
 
@@ -176,8 +189,8 @@ const action = new CreateTonWallet(runtime);
 
 // Execute transfer
 const { walletAddress, mnemonic } = await action.createNewWallet({
-    rpcUrl: "https://toncenter.com/api/v2/jsonRPC",
-    encryptionPassword: "GAcAWFv6ZXuaJOuSqemxku4",
+  rpcUrl: "https://toncenter.com/api/v2/jsonRPC",
+  encryptionPassword: "GAcAWFv6ZXuaJOuSqemxku4",
 });
 ```
 
@@ -243,6 +256,8 @@ npm run test
 
 ## Dependencies
 
+- `@ston-fi/api`: API for STON.fi DEX
+- `@ston-fi/sdk`: SDK for STON.fi DEX
 - `@ton/ton`: Core TON blockchain functionality
 - `@ton/crypto`: Cryptographic operations
 - `bignumber.js`: Precise number handling
@@ -371,6 +386,7 @@ Contributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) fil
 
 This plugin integrates with and builds upon several key technologies:
 
+- [STON.fi](https://ston.fi/): STON.fi DEX
 - [TON Blockchain](https://ton.org/): The Open Network blockchain platform
 - [@ton/ton](https://www.npmjs.com/package/@ton/ton): Core TON blockchain functionality
 - [@ton/crypto](https://www.npmjs.com/package/@ton/crypto): Cryptographic operations
@@ -382,6 +398,7 @@ Special thanks to:
 - The TON Foundation for developing and maintaining the TON blockchain
 - The TON Developer community
 - The TON SDK maintainers
+- The STON.fi SDK maintainers
 - The Eliza community for their contributions and feedback
 
 For more information about TON blockchain capabilities:
