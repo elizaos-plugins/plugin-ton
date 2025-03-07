@@ -19,7 +19,7 @@ import getCollectionDataAction from "./actions/getCollectionData.ts"
 import updateNFTMetadataAction from "./actions/updateNFTMetadata.ts";
 import tokenPriceAction from "./actions/tokenPrice.ts";
 import { tonTokenPriceProvider } from "./providers/tokenProvider.ts";
-
+import jettonInteractionAction from "./actions/jettonInteraction.ts";
 export { tokenPriceAction as GetTokenPrice };
 import { StakingProvider, nativeStakingProvider } from "./providers/staking.ts";
 import swapStonAction from "./actions/swapSton.ts";
@@ -54,7 +54,7 @@ export { getCollectionDataAction as GetCollectionData ,
   transferNFTAction as TransferNFT,
 };
 export { dexAction as DexAction };
-
+export { jettonInteractionAction as JettonInteractionActionTon };
 export const tonPlugin: Plugin = {
   name: "ton",
   description: "Ton Plugin for Eliza",
@@ -84,6 +84,7 @@ export const tonPlugin: Plugin = {
     updateNFTMetadataAction as Action,
     getCollectionDataAction as Action,
     dexAction as Action,
+    jettonInteractionAction as Action,
   ],
   evaluators: [],
   providers: [
