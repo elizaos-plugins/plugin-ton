@@ -5,6 +5,7 @@ export const CONFIG_KEYS = {
   TON_PRIVATE_KEY: "TON_PRIVATE_KEY",
   TON_RPC_URL: "TON_RPC_URL",
   TON_RPC_API_KEY: "TON_RPC_API_KEY",
+  TON_EXPLORER_URL: "TON_EXPLORER_URL",
   TON_MANIFEST_URL: "TON_MANIFEST_URL",
   TON_BRIDGE_URL: "TON_BRIDGE_URL",
 };
@@ -13,6 +14,7 @@ export const envSchema = z.object({
   TON_PRIVATE_KEY: z.string().min(1, "Ton private key is required"),
   TON_RPC_URL: z.string(),
   TON_RPC_API_KEY: z.string(),
+  TON_EXPLORER_URL: z.string(),
   TON_MANIFEST_URL: z.string(),
   TON_BRIDGE_URL: z.string(),
 });
@@ -32,6 +34,9 @@ export async function validateEnvConfig(
       TON_RPC_API_KEY:
         runtime.getSetting(CONFIG_KEYS.TON_RPC_API_KEY) ||
         process.env.TON_RPC_API_KEY,
+      TON_EXPLORER_URL:
+        runtime.getSetting(CONFIG_KEYS.TON_EXPLORER_URL) ||
+        process.env.TON_EXPLORER_URL,
       TON_MANIFEST_URL:
         runtime.getSetting(CONFIG_KEYS.TON_MANIFEST_URL) ||
         process.env.TON_MANIFEST_URL,

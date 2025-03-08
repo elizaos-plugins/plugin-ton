@@ -9,8 +9,8 @@ import {
   type HandlerCallback,
   Content,
 } from "@elizaos/core";
-import { Address, internal, SendMode, toNano, beginCell } from "@ton/core";
-import { Builder } from "@ton/core";
+import { Address, internal, SendMode, toNano, beginCell } from "@ton/ton";
+import { Builder } from "@ton/ton";
 import { z } from "zod";
 import { initWalletProvider, WalletProvider } from "../providers/wallet";
 import { waitSeqnoContract } from "../utils/util";

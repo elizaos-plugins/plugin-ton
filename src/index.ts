@@ -2,6 +2,11 @@ import type { Action, Plugin } from "@elizaos/core";
 import transferAction from "./actions/transfer.ts";
 import createWalletAction from "./actions/createWallet.ts";
 import loadWalletAction from "./actions/loadWallet.ts";
+import borrowAction from "./actions/evaaBorrow";
+import supplyAction from "./actions/evaaSupply";
+import withdrawAction from "./actions/evaaWithdraw";
+import repayAction from "./actions/evaaRepay";
+import positionsAction from "./actions/evaaPositions";
 import stakeAction from "./actions/stake.ts";
 import unstakeAction from "./actions/unstake.ts";
 import getPoolInfoAction from "./actions/getPoolInfo.ts";
@@ -64,6 +69,11 @@ export const tonPlugin: Plugin = {
     loadWalletAction,
     stakeAction,
     unstakeAction,
+    borrowAction,
+    supplyAction,
+    withdrawAction,
+    repayAction,
+    positionsAction,
     getPoolInfoAction,
     batchTransferAction,
     connectAction,

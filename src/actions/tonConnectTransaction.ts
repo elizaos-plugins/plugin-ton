@@ -172,6 +172,11 @@ export default {
     ) => {
         elizaLogger.log("Starting SEND_TRANSACTION_TONCONNECT handler...");
 
+        // exit if TONCONNECT is not used
+        if (!runtime.getSetting('TON_MANIFEST_URL')) {
+            return false
+        }
+
         try {
             const provider = await initTonConnectProvider(runtime);
 

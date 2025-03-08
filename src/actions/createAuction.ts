@@ -9,7 +9,7 @@ import {
     type HandlerCallback,
     Content,
   } from "@elizaos/core";
-  import { Address, internal, SendMode, toNano } from "@ton/core";
+  import { Address, internal, SendMode, toNano } from "@ton/ton";
   import { z } from "zod";
   import { initWalletProvider, WalletProvider } from "../providers/wallet";
   import { waitSeqnoContract } from "../utils/util";
@@ -19,13 +19,13 @@ import {
     marketplaceAddress,
     marketplaceFeeAddress,
   } from "../services/nft-marketplace/listingFactory";
-  
+
   // Configuration constants
   const CONFIG = {
     royaltyPercent: 5,
     marketplaceFeePercent: 5,
   };
-  
+
   /**
    * Schema for create auction input.
    * Requires:
@@ -45,14 +45,14 @@ import {
       message: "NFT address, minimum bid, maximum bid, and expiry time are required",
       path: ["nftAddress", "minimumBid", "maximumBid", "expiryTime"],
     });
-  
+
   export interface CreateAuctionContent extends Content {
     nftAddress: string;
     minimumBid: string;
     maximumBid: string;
     expiryTime: string;
   }
-  
+
   function isCreateAuctionContent(
     content: Content
   ): content is CreateAuctionContent {
@@ -63,7 +63,7 @@ import {
       typeof content.expiryTime === "string"
     );
   }
-  
+
   const createAuctionTemplate = `Respond with a JSON markdown block containing only the extracted values.
   Example response:
   \`\`\`json
@@ -74,11 +74,11 @@ import {
     "expiryTime": "<Auction expiry time in hours>"
   }
   \`\`\`
-  
+
   {{recentMessages}}
   If a parameter is missing, respond with a question asking specifically for that parameter.
   Respond with a JSON markdown block containing only the extracted values.`;
-  
+
   /**
    * Helper function to build create auction parameters.
    */
@@ -99,7 +99,7 @@ import {
     });
     return content.object as any;
   };
-  
+
   /**
    * CreateAuctionAction encapsulates the logic to create an auction for an NFT.
    */
@@ -108,7 +108,7 @@ import {
     constructor(walletProvider: WalletProvider) {
       this.walletProvider = walletProvider;
     }
-  
+
     /**
      * Creates an auction for an NFT using default marketplace configuration
      */
@@ -117,13 +117,13 @@ import {
       const contract = client.open(this.walletProvider.wallet);
 
       elizaLogger.info("Creating auction with params: ", params);
-  
+
       const minimumBid = toNano(params.minimumBid);
       const maximumBid = toNano(params.maximumBid);
       const expiryTime = Math.floor(Date.now() / 1000) + parseInt(params.expiryTime) * 3600; // Convert hours to seconds and add to current timestamp
       const royalty = CONFIG.royaltyPercent;
       const fee = CONFIG.marketplaceFeePercent;
-  
+
       const auctionData = {
         nftAddress: Address.parse(params.nftAddress),
         nftOwnerAddress: this.walletProvider.wallet.address,
@@ -139,9 +139,9 @@ import {
       };
 
       elizaLogger.info("Minbid: ", minimumBid);
-  
+
       const auctionBody = await buildNftAuctionV3R3DeploymentBody(auctionData);
-  
+
       const seqno = await contract.getSeqno();
       const auctionMessage = internal({
         to: params.nftAddress,
@@ -149,16 +149,16 @@ import {
         bounce: true,
         body: auctionBody,
       });
-  
+
       const transfer = await contract.sendTransfer({
         seqno,
         secretKey: this.walletProvider.keypair.secretKey,
         messages: [auctionMessage],
         sendMode: SendMode.IGNORE_ERRORS + SendMode.PAY_GAS_SEPARATELY,
       });
-  
+
       await waitSeqnoContract(seqno, contract);
-  
+
       return {
         nftAddress: params.nftAddress,
         minimumBid: params.minimumBid,
@@ -171,7 +171,7 @@ import {
       };
     }
   }
-  
+
   export default {
     name: "CREATE_AUCTION",
     similes: ["NFT_AUCTION", "AUCTION_NFT", "START_AUCTION"],
@@ -186,7 +186,7 @@ import {
     ) => {
       elizaLogger.log("Starting CREATE_AUCTION handler...");
       const params = await buildCreateAuctionData(runtime, message, state);
-  
+
       if (!isCreateAuctionContent(params)) {
         if (callback) {
           callback({
@@ -196,13 +196,13 @@ import {
         }
         return false;
       }
-  
+
       try {
         const walletProvider = await initWalletProvider(runtime);
         const createAuctionAction = new CreateAuctionAction(walletProvider);
-  
+
         const result = await createAuctionAction.createAuction(params);
-  
+
         if (callback) {
           callback({
             text: JSON.stringify(result, null, 2),

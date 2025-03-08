@@ -13,8 +13,8 @@ import {
   import { initWalletProvider, WalletProvider } from "../providers/wallet";
   import { getMinBid, getNextValidBidAmount, isAuctionEnded } from "../services/nft-marketplace/listingData";
   import { bidOnAuction } from "../services/nft-marketplace/listingTransactions";
-import { toNano } from "@ton/core";
-  
+import { toNano } from "@ton/ton";
+
   /**
    * Schema for bid input.
    * Requires:
@@ -33,18 +33,18 @@ import { toNano } from "@ton/core";
         path: ["nftAddress"],
       }
     );
-  
+
   export interface BidAuctionContent extends Content {
     nftAddress: string;
     bidAmount?: string;
   }
-  
+
   function isBidAuctionContent(
     content: Content
   ): content is BidAuctionContent {
     return typeof content.nftAddress === "string";
   }
-  
+
   const bidAuctionTemplate = `Respond with a JSON markdown block containing only the extracted values.
   Example response:
   \`\`\`json
@@ -53,12 +53,12 @@ import { toNano } from "@ton/core";
     "bidAmount": "<optional bid amount in TON>"
   }
   \`\`\`
-  
+
   {{recentMessages}}
-  
+
   If no bid amount is provided, make bidAmount null or omit it.
   Respond with a JSON markdown block containing only the extracted values.`;
-  
+
   /**
    * Helper function to build bid parameters.
    */
@@ -79,17 +79,17 @@ import { toNano } from "@ton/core";
     });
     return content.object as any;
   };
-  
+
   /**
    * BidAuctionAction encapsulates the logic to bid on an NFT auction.
    */
   export class BidAuctionAction {
     private walletProvider: WalletProvider;
-    
+
     constructor(walletProvider: WalletProvider) {
       this.walletProvider = walletProvider;
     }
-  
+
     /**
      * Validates whether the auction is valid for bidding
      */
@@ -100,7 +100,7 @@ import { toNano } from "@ton/core";
         if (auctionEnded) {
           return { valid: false, message: "This auction has already ended" };
         }
-        
+
         return { valid: true };
       } catch (error: any) {
         if (error.message.includes("Not an auction listing")) {
@@ -109,20 +109,20 @@ import { toNano } from "@ton/core";
         throw error;
       }
     }
-  
+
     /**
      * Places a bid on an NFT auction
      */
     async bid(nftAddress: string, bidAmount?: string): Promise<any> {
       try {
         elizaLogger.log(`Starting bid process for NFT: ${nftAddress}`);
-        
+
         // First validate the auction
         const validationResult = await this.validateAuction(nftAddress);
         if (!validationResult.valid) {
           throw new Error(validationResult.message);
         }
-        
+
         // Determine the bid amount
         let amount: bigint;
         if(!bidAmount) {
@@ -133,7 +133,7 @@ import { toNano } from "@ton/core";
 
         // Place the bid
         const receipt = await bidOnAuction(this.walletProvider, nftAddress, amount);
-        
+
         return receipt;
       } catch (error) {
         elizaLogger.error(`Error bidding on NFT ${nftAddress}: ${error}`);
@@ -141,7 +141,7 @@ import { toNano } from "@ton/core";
       }
     }
   }
-  
+
   export default {
     name: "BID_AUCTION",
     similes: ["NFT_BID", "PLACE_BID", "BID_NFT", "AUCTION_BID"],
@@ -156,7 +156,7 @@ import { toNano } from "@ton/core";
     ) => {
       elizaLogger.log("Starting BID_AUCTION handler...");
       const params = await buildBidAuctionData(runtime, message, state);
-  
+
       if (!isBidAuctionContent(params)) {
         if (callback) {
           callback({
@@ -166,13 +166,13 @@ import { toNano } from "@ton/core";
         }
         return false;
       }
-  
+
       try {
         const walletProvider = await initWalletProvider(runtime);
         const bidAuctionAction = new BidAuctionAction(walletProvider);
-        
+
         const result = await bidAuctionAction.bid(params.nftAddress, params.bidAmount);
-        
+
         if (callback) {
           callback({
             text: JSON.stringify(result, null, 2),

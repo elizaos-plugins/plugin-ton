@@ -1,4 +1,4 @@
-import { Address, TupleReader } from "@ton/core";
+import { Address, TupleReader } from "@ton/ton";
 import { WalletProvider } from "../../providers/wallet";
 import { getNftOwner } from "../../utils/NFTItem";
 import {
@@ -20,7 +20,7 @@ export async function getListingData(walletProvider: WalletProvider, nftAddress:
     const listingAddress = await getNftOwner(walletProvider, nftAddress);
     const client = walletProvider.getWalletClient();
     const result = await client.runMethod(listingAddress, "get_sale_data");
-    
+
     if (!isAuction(result.stack)) {
       return parseFixedPriceData(listingAddress, result.stack);
     } else {
@@ -33,7 +33,7 @@ export async function getListingData(walletProvider: WalletProvider, nftAddress:
 
 function parseFixedPriceData(listingAddress: Address, stack: TupleReader): FixedPriceListingData {
   const fullData = parseFixedPriceDataFromStack(stack);
-  
+
   // Return only what's needed for the simplified interface
   return {
     listingAddress,
@@ -45,7 +45,7 @@ function parseFixedPriceData(listingAddress: Address, stack: TupleReader): Fixed
 
 function parseAuctionData(listingAddress: Address, stack: TupleReader): AuctionListingData {
   const fullData = parseAuctionDataFromStack(stack);
-  
+
   // Return only what's needed for the simplified interface
   return {
     listingAddress,
@@ -64,13 +64,13 @@ export async function getFixedPriceData(walletProvider: WalletProvider, nftAddre
     const listingAddress = await getNftOwner(walletProvider, nftAddress);
     const client = walletProvider.getWalletClient();
     const result = await client.runMethod(listingAddress, "get_sale_data");
-    
+
     if (isAuction(result.stack)) {
       throw new Error("Not a fixed price listing");
     }
-    
+
     const data = parseFixedPriceDataFromStack(result.stack);
-    
+
     // Return with listingAddress attached
     return {
       ...data,
@@ -86,13 +86,13 @@ export async function getAuctionData(walletProvider: WalletProvider, nftAddress:
     const listingAddress = await getNftOwner(walletProvider, nftAddress);
     const client = walletProvider.getWalletClient();
     const result = await client.runMethod(listingAddress, "get_sale_data");
-    
+
     if (!isAuction(result.stack)) {
       throw new Error("Not an auction listing");
     }
-    
+
     const data = parseAuctionDataFromStack(result.stack);
-    
+
     // Return with listingAddress attached
     return {
       ...data,
@@ -129,7 +129,7 @@ export async function isAuctionEnded(walletProvider: WalletProvider, nftAddress:
   if (!listingData.isAuction) {
     throw new Error("Not an auction listing");
   }
-  
+
   const now = Math.floor(Date.now() / 1000);
   return now > listingData.endTime;
 }
@@ -139,11 +139,11 @@ export async function getNextValidBidAmount(walletProvider: WalletProvider, nftA
   if (!listingData.isAuction) {
     throw new Error("Not an auction listing");
   }
-  
+
   if (listingData.lastBid === BigInt(0)) {
     return listingData.minBid;
   }
-  
+
   // Get complete auction data to access minStep
   const auctionData = await getAuctionData(walletProvider, nftAddress);
   const minIncrement = (listingData.lastBid * BigInt(auctionData.minStep)) / BigInt(100);

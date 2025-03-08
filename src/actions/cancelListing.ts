@@ -16,7 +16,7 @@ import {
   toNano,
   Cell,
   beginCell,
-} from "@ton/core";
+} from "@ton/ton";
 import { z } from "zod";
 import { initWalletProvider, WalletProvider } from "../providers/wallet";
 import { waitSeqnoContract } from "../utils/util";
