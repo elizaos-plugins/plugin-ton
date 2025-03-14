@@ -76,6 +76,9 @@ If you have an idea of how this could be fixed, provide a brief suggestion.
 
 ---
 
+### Submission Deadline
+28th March 2025
+
 🔗 **Submit your bug reports here:** [GitHub Issues](https://github.com/elizaos-plugins/plugin-ton/issues)
 
 📢 **Join us in shaping the future of AI & Web3 on TON!** 🚀✨  
