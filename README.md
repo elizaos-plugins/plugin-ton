@@ -1,6 +1,6 @@
 # @elizaos/plugin-ton
 
-A plugin for handling TON (Telegram Open Network) blockchain operations, providing wallet management and transfer capabilities.
+A plugin for handling TON (The Open Network) blockchain operations, providing wallet management and transfer capabilities.
 
 ## Overview
 
