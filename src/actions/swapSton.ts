@@ -8,8 +8,8 @@ import {
     type IAgentRuntime,
     type Memory,
     type State,
-    ActionExample,
-    Action,
+    type ActionExample,
+    type Action,
     generateText,
 } from "@elizaos/core";
 import { z } from "zod";
@@ -19,14 +19,17 @@ import {
     nativeWalletProvider,
     type WalletProvider,
 } from "../providers/wallet";
-
-import { OpenedContract, toNano, TransactionDescriptionGeneric, fromNano } from "@ton/ton";
+import { type OpenedContract, 
+         toNano, 
+         type TransactionDescriptionGeneric, 
+         fromNano, 
+         internal 
+        } from "@ton/ton";
 import { AssetTag } from '@ston-fi/api';
-
 import { validateEnvConfig } from "../enviroment";
-import { StonAsset, initStonProvider, StonProvider } from "../providers/ston";
-
-
+import { type StonAsset, initStonProvider, type StonProvider } from "../providers/ston";
+import { initTonConnectProvider, type TonConnectProvider } from "../providers/tonConnect";
+import { CHAIN, type SendTransactionRequest } from "@tonconnect/sdk";
 
 export interface ISwapContent extends Content {
     tokenIn: string;
@@ -73,15 +76,16 @@ Respond with a JSON markdown block containing only the extracted values.`;
 
 export class SwapAction {
     private walletProvider: WalletProvider;
+    private tonConnectProvider: TonConnectProvider;
     private stonProvider: StonProvider;
     private queryId: number;
     private router: OpenedContract<any>;
     private proxyTon: OpenedContract<any>;
-    constructor(walletProvider: WalletProvider, stonProvider: StonProvider) {
+    constructor(walletProvider: WalletProvider, stonProvider: StonProvider, tonConnectProvider: TonConnectProvider) {
         this.walletProvider = walletProvider;
         this.stonProvider = stonProvider;
+        this.tonConnectProvider = tonConnectProvider;
     };
-
 
     async waitSwapStatusMainnet() {
         let waitingSteps = 0;
@@ -96,9 +100,8 @@ export class SwapAction {
             if (swapStatus["@type"] === "Found") {
                 if (swapStatus.exitCode === "swap_ok") {
                     return swapStatus;
-                } else {
-                    throw new Error("Swap failed");
-                }
+                } 
+                throw new Error("Swap failed");
             }
 
             waitingSteps++;
@@ -106,13 +109,13 @@ export class SwapAction {
                 throw new Error("Swap failed");
             }
         }
-    }
+    };
 
     async waitSwapTransaction(originalLt: string, originalHash: string) {
 
         const client = this.walletProvider.getWalletClient();
 
-        let prevLt = originalLt;
+        const prevLt = originalLt;
         let prevHash = originalHash;
 
         let waitingSteps = 0;
@@ -128,11 +131,10 @@ export class SwapAction {
                 if ((description.computePhase?.type === 'vm' && description.actionPhase?.success === true && description.actionPhase?.success)
                     || (description.computePhase?.type !== 'vm' && description.actionPhase?.success)) {
                     return hash;
-                } else {
-                    prevHash = hash;
-                    console.log(`Transaction failed. Waiting for retries...`);
-                    waitingSteps = 0;
                 }
+                prevHash = hash;
+                console.log("Transaction failed. Waiting for retries...");
+                waitingSteps = 0;
             }
             waitingSteps += 1;
             if (waitingSteps > this.stonProvider.TX_WAITING_STEPS) {
@@ -148,8 +150,7 @@ export class SwapAction {
                 throw new Error("Transaction failed and no more retries received");
             }
         }
-    }
-
+    };
 
     async swap(inAsset: StonAsset, outAsset: StonAsset, amountIn: string) {
 
@@ -162,25 +163,22 @@ export class SwapAction {
         this.queryId = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
 
 
-        let prevState = await client.getContractState(this.walletProvider.wallet.address);
-        let { lt: prevLt, hash: prevHash } = prevState.lastTransaction ?? { lt: "", hash: "" };
-
+        const prevState = await client.getContractState(this.walletProvider.wallet.address);
+        const { lt: prevLt, hash: prevHash } = prevState.lastTransaction ?? { lt: "", hash: "" };
+        let txParams;
         if (inAsset.kind === "Ton" && outAsset.kind === "Jetton") {
-            await this.router.sendSwapTonToJetton(
-                contract.sender(this.walletProvider.keypair.secretKey),
+            txParams = await this.router.getSwapTonToJettonTxParams(
                 {
                     userWalletAddress: this.walletProvider.getAddress(),
                     proxyTon: this.proxyTon,
                     offerAmount: toNano(amountIn),
                     askJettonAddress: outAsset.contractAddress,
-
                     minAskAmount: "1",
                     queryId: this.queryId,
                 }
             );
         } else if (inAsset.kind === "Jetton" && outAsset.kind === "Ton") {
-            await this.router.sendSwapJettonToTon(
-                contract.sender(this.walletProvider.keypair.secretKey),
+            txParams = await this.router.getSwapTonToJettonTxParams(
                 {
                     userWalletAddress: this.walletProvider.getAddress(),
                     offerJettonAddress: inAsset.contractAddress,
@@ -190,8 +188,7 @@ export class SwapAction {
                     queryId: this.queryId,
                 });
         } else if (inAsset.kind === "Jetton" && outAsset.kind === "Jetton") {
-            await this.router.sendSwapJettonToJetton(
-                contract.sender(this.walletProvider.keypair.secretKey),
+            txParams = await this.router.getSwapTonToJettonTxParams(
                 {
                     userWalletAddress: this.walletProvider.getAddress(),
                     offerJettonAddress: inAsset.contractAddress,
@@ -201,9 +198,31 @@ export class SwapAction {
                     queryId: this.queryId,
                 });
         }
+        console.log(txParams)
+        if (this.tonConnectProvider.isConnected()) {
+            console.log("Sending transaction with TonConnect");
+            await this.tonConnectProvider.sendTransaction({
+                validUntil: Date.now() + 1000000,
+                network: this.stonProvider.NETWORK === "mainnet" ? CHAIN.MAINNET : CHAIN.TESTNET,
+                messages: [
+                  {
+                    address: txParams.to.toString(),
+                    amount: txParams.value.toString(),
+                    payload: txParams.body?.toBoc().toString("base64"),
+                  },
+                ],
+              } as SendTransactionRequest);
+        } else {
+            console.log("Sending transaction with contract");
+            await contract.sendTransfer({
+                seqno: await contract.getSeqno(),
+                secretKey: this.walletProvider.keypair.secretKey,
+                messages: [internal(txParams)],
+              });
+        }
 
-        let txHash, amountOut = "";
-        txHash = await this.waitSwapTransaction(prevLt, prevHash);
+        let amountOut = "";
+        let txHash = await this.waitSwapTransaction(prevLt, prevHash);
 
         if (this.stonProvider.NETWORK === "mainnet") {
             const swapStatus = await this.waitSwapStatusMainnet() as { txHash: string, coins: string };
@@ -212,8 +231,8 @@ export class SwapAction {
         }
 
         return { txHash, amountOut };
-    }
-}
+    };
+};
 
 const buildSwapDetails = async (
     runtime: IAgentRuntime,
@@ -257,8 +276,8 @@ const buildSwapDetails = async (
 
 
 export default {
-    name: "SWAP_STON",
-    similes: ["SWAP_TOKEN_STON", "SWAP_TOKENS_STON", "TOKEN_SWAP_STON", "TRADE_TOKENS_STON", "EXCHANGE_TOKENS_STON"],
+    name: "SWAP_TOKEN_STON",
+    similes: ["SWAP_TOKENS_STON"],
     template: swapTemplate,
     validate: async (runtime: IAgentRuntime, message: Memory) => {
         elizaLogger.log("Validating config for user:", message.userId);
@@ -274,22 +293,25 @@ export default {
         _options: { [key: string]: unknown },
         callback?: HandlerCallback,
     ) => {
-        elizaLogger.log("Starting SWAP handler...");
-
-        elizaLogger.log("Handler initialized. Checking user authorization...");
-
         // TODO: See how to push response to the interface before finishing the action
-
         try {
+            elizaLogger.log("Starting SWAP handler...");
+            console.log("Starting SWAP handler...");
+    
+            elizaLogger.log("Handler initialized. Checking user authorization...");
+            console.log("Handler initialized. Checking user authorization...");
+            console.log("Building swap details");
             const swapContent = await buildSwapDetails(
                 runtime,
                 message,
                 state,
             );
+            console.log("Swap details built", swapContent);
             // Validate transfer content
             if (!isSwapContent(swapContent)) {
                 throw new Error("Invalid content for SWAP action.");
             }
+            console.log("Initializing STON provider");
             const stonProvider = await initStonProvider(runtime);
             // Check if tokens are part of available assets and the pair of tokens is also defined
             const [inTokenAsset, outTokenAsset] = await stonProvider.getAssets(
@@ -297,8 +319,12 @@ export default {
                 swapContent.tokenOut,
                 `(${AssetTag.LiquidityVeryHigh} | ${AssetTag.LiquidityHigh} | ${AssetTag.LiquidityMedium} ) & ${AssetTag.Popular} & ${AssetTag.DefaultSymbol}`
             ) as [StonAsset, StonAsset];
+            console.log("STON provider initialized");
             const walletProvider = await initWalletProvider(runtime);
-            const action = new SwapAction(walletProvider, stonProvider);
+            console.log("Wallet provider initialized");
+            const tonConnectProvider = await initTonConnectProvider(runtime);
+            console.log("TonConnect provider initialized");
+            const action = new SwapAction(walletProvider, stonProvider, tonConnectProvider);
             // TODO: require confirmation before processing the swap
             const { txHash, amountOut } = await action.swap(inTokenAsset, outTokenAsset, swapContent.amountIn);
             elizaLogger.success(`Successfully swapped ${swapContent.amountIn} ${swapContent.tokenIn} for ${fromNano(amountOut)} ${swapContent.tokenOut}, Transaction: ${txHash}`);
@@ -336,6 +362,7 @@ export default {
             });
             return true;
         } catch (error) {
+            console.log("Error during token swap:", error);
             elizaLogger.error("Error during token swap:", error);
 
             const template = `
@@ -378,7 +405,7 @@ export default {
                 user: "{{agent}}",
                 content: {
                     text: "Swapping 1 TON for USDC...",
-                    action: "SWAP_TOKEN",
+                    action: "SWAP_TOKEN_STON",
                 },
             },
             {
