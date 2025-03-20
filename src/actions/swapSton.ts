@@ -29,7 +29,7 @@ import { AssetTag } from '@ston-fi/api';
 import { validateEnvConfig } from "../enviroment";
 import { type StonAsset, initStonProvider, type StonProvider } from "../providers/ston";
 import { initTonConnectProvider, type TonConnectProvider } from "../providers/tonConnect";
-import { CHAIN, type SendTransactionRequest } from "@tonconnect/sdk";
+import { CHAIN, UserRejectsError, type SendTransactionRequest } from "@tonconnect/sdk";
 
 export interface ISwapContent extends Content {
     tokenIn: string;
@@ -162,14 +162,20 @@ export class SwapAction {
 
         this.queryId = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
 
-
         const prevState = await client.getContractState(this.walletProvider.wallet.address);
         const { lt: prevLt, hash: prevHash } = prevState.lastTransaction ?? { lt: "", hash: "" };
+
         let txParams;
+        let userAddress: string;
+        if (this.tonConnectProvider.isConnected()) {
+            userAddress = this.tonConnectProvider.getWalletInfo()?.account.address;
+        } else {
+            userAddress = this.walletProvider.getAddress();
+        }
         if (inAsset.kind === "Ton" && outAsset.kind === "Jetton") {
             txParams = await this.router.getSwapTonToJettonTxParams(
                 {
-                    userWalletAddress: this.walletProvider.getAddress(),
+                    userWalletAddress: userAddress,
                     proxyTon: this.proxyTon,
                     offerAmount: toNano(amountIn),
                     askJettonAddress: outAsset.contractAddress,
@@ -178,9 +184,9 @@ export class SwapAction {
                 }
             );
         } else if (inAsset.kind === "Jetton" && outAsset.kind === "Ton") {
-            txParams = await this.router.getSwapTonToJettonTxParams(
+            txParams = await this.router.getSwapJettonToTonTxParams(
                 {
-                    userWalletAddress: this.walletProvider.getAddress(),
+                    userWalletAddress: userAddress,
                     offerJettonAddress: inAsset.contractAddress,
                     offerAmount: toNano(amountIn),
                     minAskAmount: "1",
@@ -188,9 +194,9 @@ export class SwapAction {
                     queryId: this.queryId,
                 });
         } else if (inAsset.kind === "Jetton" && outAsset.kind === "Jetton") {
-            txParams = await this.router.getSwapTonToJettonTxParams(
+            txParams = await this.router.getSwapJettonToJettonTxParams(
                 {
-                    userWalletAddress: this.walletProvider.getAddress(),
+                    userWalletAddress: userAddress,
                     offerJettonAddress: inAsset.contractAddress,
                     offerAmount: toNano(amountIn),
                     askJettonAddress: outAsset.contractAddress,
@@ -198,31 +204,29 @@ export class SwapAction {
                     queryId: this.queryId,
                 });
         }
-        console.log(txParams)
+
+        let amountOut = "";
+        let txHash = "";
+
         if (this.tonConnectProvider.isConnected()) {
-            console.log("Sending transaction with TonConnect");
-            await this.tonConnectProvider.sendTransaction({
-                validUntil: Date.now() + 1000000,
+            const transaction: SendTransactionRequest = {
+                validUntil: Math.floor(Date.now() / 1000) + 300, // 5 minutes in seconds
                 network: this.stonProvider.NETWORK === "mainnet" ? CHAIN.MAINNET : CHAIN.TESTNET,
-                messages: [
-                  {
-                    address: txParams.to.toString(),
+                messages: [{
+                    address: txParams.to?.toString(),
                     amount: txParams.value.toString(),
-                    payload: txParams.body?.toBoc().toString("base64"),
-                  },
-                ],
-              } as SendTransactionRequest);
+                    payload: txParams.body?.toBoc().toString("base64")
+                }]
+            };
+            txHash = await this.tonConnectProvider.sendTransaction(transaction);
         } else {
-            console.log("Sending transaction with contract");
             await contract.sendTransfer({
                 seqno: await contract.getSeqno(),
                 secretKey: this.walletProvider.keypair.secretKey,
                 messages: [internal(txParams)],
               });
+            txHash = await this.waitSwapTransaction(prevLt, prevHash);
         }
-
-        let amountOut = "";
-        let txHash = await this.waitSwapTransaction(prevLt, prevHash);
 
         if (this.stonProvider.NETWORK === "mainnet") {
             const swapStatus = await this.waitSwapStatusMainnet() as { txHash: string, coins: string };
@@ -296,22 +300,18 @@ export default {
         // TODO: See how to push response to the interface before finishing the action
         try {
             elizaLogger.log("Starting SWAP handler...");
-            console.log("Starting SWAP handler...");
     
             elizaLogger.log("Handler initialized. Checking user authorization...");
-            console.log("Handler initialized. Checking user authorization...");
-            console.log("Building swap details");
+
             const swapContent = await buildSwapDetails(
                 runtime,
                 message,
                 state,
             );
-            console.log("Swap details built", swapContent);
             // Validate transfer content
             if (!isSwapContent(swapContent)) {
                 throw new Error("Invalid content for SWAP action.");
             }
-            console.log("Initializing STON provider");
             const stonProvider = await initStonProvider(runtime);
             // Check if tokens are part of available assets and the pair of tokens is also defined
             const [inTokenAsset, outTokenAsset] = await stonProvider.getAssets(
@@ -319,11 +319,8 @@ export default {
                 swapContent.tokenOut,
                 `(${AssetTag.LiquidityVeryHigh} | ${AssetTag.LiquidityHigh} | ${AssetTag.LiquidityMedium} ) & ${AssetTag.Popular} & ${AssetTag.DefaultSymbol}`
             ) as [StonAsset, StonAsset];
-            console.log("STON provider initialized");
             const walletProvider = await initWalletProvider(runtime);
-            console.log("Wallet provider initialized");
             const tonConnectProvider = await initTonConnectProvider(runtime);
-            console.log("TonConnect provider initialized");
             const action = new SwapAction(walletProvider, stonProvider, tonConnectProvider);
             // TODO: require confirmation before processing the swap
             const { txHash, amountOut } = await action.swap(inTokenAsset, outTokenAsset, swapContent.amountIn);
@@ -362,7 +359,6 @@ export default {
             });
             return true;
         } catch (error) {
-            console.log("Error during token swap:", error);
             elizaLogger.error("Error during token swap:", error);
 
             const template = `
