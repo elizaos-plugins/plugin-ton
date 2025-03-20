@@ -8,11 +8,11 @@ import type {
 
 import {
     TonConnect,
-    WalletInfoRemote,
+    type WalletInfoRemote,
     isWalletInfoRemote,
     UserRejectsError,
-    WalletInfo,
-    SendTransactionRequest,
+    type WalletInfo,
+    type SendTransactionRequest,
 } from "@tonconnect/sdk";
 import NodeCache from "node-cache";
 import { CONFIG_KEYS } from "../enviroment";
@@ -181,6 +181,7 @@ export class TonConnectProvider {
             const storage = new TonConnectStorage(fileCache);
 
             this.connector = new TonConnect({ manifestUrl, storage });
+
             this.setupEventListeners();
         } catch (error) {
             console.error("Failed to initialize connection:", error);
@@ -208,6 +209,11 @@ export class TonConnectProvider {
             try {
                 return await operation();
             } catch (error) {
+                // if user declines, don't retry
+                if (error instanceof UserRejectsError 
+                    || error.code === 300)  { 
+                    throw error;
+                }
                 if (i === retries - 1) throw error;
                 const delay = PROVIDER_CONFIG.RETRY_DELAY * Math.pow(2, i);
                 await new Promise((resolve) => setTimeout(resolve, delay));
@@ -329,9 +335,7 @@ export class TonConnectProvider {
             try {
                 return await this.connector.sendTransaction(transaction);
             } catch (error) {
-                if (error instanceof UserRejectsError) {
-                    throw new Error("Transaction rejected by user");
-                }
+                this.handleError("Transaction error", error);
                 throw error;
             }
         });
