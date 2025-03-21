@@ -11,12 +11,12 @@ import {
     type ActionExample,
     type Action,
     generateText,
+    generateTrueOrFalse,
 } from "@elizaos/core";
 import { z } from "zod";
 import { sleep } from "../utils/util";
 import {
     initWalletProvider,
-    nativeWalletProvider,
     type WalletProvider,
 } from "../providers/wallet";
 import { type OpenedContract, 
@@ -29,12 +29,18 @@ import { AssetTag } from '@ston-fi/api';
 import { validateEnvConfig } from "../enviroment";
 import { type StonAsset, initStonProvider, type StonProvider } from "../providers/ston";
 import { initTonConnectProvider, type TonConnectProvider } from "../providers/tonConnect";
-import { CHAIN, UserRejectsError, type SendTransactionRequest } from "@tonconnect/sdk";
+import { CHAIN, type SendTransactionRequest } from "@tonconnect/sdk";
 
 export interface ISwapContent extends Content {
     tokenIn: string;
     amountIn: string;
     tokenOut: string;
+}
+
+export interface IPendingSwapContent {
+    amountIn: string;
+    assetIn: StonAsset;
+    assetOut: StonAsset;
 }
 
 function isSwapContent(content: Content): content is ISwapContent {
@@ -50,7 +56,7 @@ const swapSchema = z.object({
     tokenIn: z.string().min(1, { message: "First token is required." }),
     amountIn: z.string().min(1, { message: "Amount is required." }),
     tokenOut: z.string().min(1, { message: "Second token is required." }),
-});
+}).strict();
 
 const swapTemplate = `Respond with a JSON markdown block containing only the extracted values. Use null for any values that cannot be determined.
 
@@ -73,6 +79,12 @@ Given the recent messages, extract the following information about the requested
 Respond with a JSON markdown block containing only the extracted values.`;
 
 
+const finishSwapTemplate = `
+{{recentMessages}}
+
+Given the recent messages, evaluate if {{user1}} wants to finish a swap that is pending.
+Return true if {{user1}} wants to finish the swap, false otherwise.
+`;
 
 export class SwapAction {
     private walletProvider: WalletProvider;
@@ -244,9 +256,6 @@ const buildSwapDetails = async (
     state: State,
 ): Promise<ISwapContent> => {
 
-    const walletInfo = await nativeWalletProvider.get(runtime, message, state);
-    state.walletInfo = walletInfo;
-
     let currentState = state;
     if (!currentState) {
         currentState = (await runtime.composeState(message)) as State;
@@ -277,19 +286,198 @@ const buildSwapDetails = async (
     return swapContent;
 };
 
+const buildFinishSwapDetails = async (
+    runtime: IAgentRuntime,
+    message: Memory,
+    state: State,
+): Promise<boolean> => {
 
+    let currentState = state;
+    if (!currentState) {
+        currentState = (await runtime.composeState(message)) as State;
+    } else {
+        currentState = await runtime.updateRecentMessageState(currentState);
+    }
 
-export default {
+    // Compose swap context
+    const swapIsToBeFinished = composeContext({
+        state: currentState,
+        template: finishSwapTemplate,
+    });
+
+    // Generate swap content with the schema
+    return await generateTrueOrFalse({
+        runtime,
+        context: swapIsToBeFinished,
+        modelClass: ModelClass.SMALL,
+    });
+};
+
+async function handleSwapStart(
+        runtime: IAgentRuntime, 
+        message: Memory, 
+        state: State, 
+        callback?: HandlerCallback
+    ) {
+    const swapContent = await buildSwapDetails(
+        runtime,
+        message,
+        state,
+    );
+    
+    // Validate transfer content
+    if (!isSwapContent(swapContent)) {
+        throw new Error("Invalid content for SWAP action.");
+    }
+    const stonProvider = await initStonProvider(runtime);
+    
+    // Check if tokens are part of available assets and the pair of tokens is also defined
+    const [inTokenAsset, outTokenAsset] = await stonProvider.getAssets(
+        swapContent.tokenIn,
+        swapContent.tokenOut,
+        `(${AssetTag.LiquidityVeryHigh} | ${AssetTag.LiquidityHigh} | ${AssetTag.LiquidityMedium} ) & ${AssetTag.Popular} & ${AssetTag.DefaultSymbol}`
+    ) as [StonAsset, StonAsset];
+
+    const template = `
+    # Recent messages:
+    {{recentMessages}}
+    # Task: Write the response from {{agentName}} to communicate that the pending swap was succesfully generated.
+    Indicate that the swap is pending and that {{user1}} must finish or cancel it.
+    It should be one paragraph and include the following information of the swap : 
+    - Input amount ${swapContent.amountIn}
+    - Input token ${inTokenAsset.symbol}
+    - Output token ${outTokenAsset.symbol}
+    `;
+    const responseContext = composeContext({
+        state,
+        template
+    });
+    const response = await generateText({
+        runtime: runtime,
+        context: responseContext,
+        modelClass: ModelClass.SMALL,
+    });
+
+    callback?.({
+        text: response,
+        content: { 
+            pendingStonSwap: {
+                amountIn: swapContent.amountIn,
+                assetIn: inTokenAsset,
+                assetOut: outTokenAsset,
+            }
+        },
+    });
+
+    await runtime.cacheManager.set("pendingStonSwap", {
+        amountIn: swapContent.amountIn,
+        assetIn: inTokenAsset,
+        assetOut: outTokenAsset,
+    } as IPendingSwapContent);
+}
+
+async function handleSwapFinish(
+        runtime: IAgentRuntime, 
+        message: Memory, 
+        state: State, 
+        pendingSwap: IPendingSwapContent,
+        callback?: HandlerCallback
+    ) {
+
+    const finishSwap = await buildFinishSwapDetails(
+        runtime,
+        message,
+        state,
+    );
+
+    if (!finishSwap) {
+        const template = `
+        # Recent messages:
+        {{recentMessages}}
+        # Task: Write the response from {{agentName}} to communicate that the swap was cancelled as requested.
+        It should be one paragraph and include the following information of the swap : 
+        - Input amount ${pendingSwap.amountIn}
+        - Input token ${pendingSwap.assetIn.symbol}
+        - Output token ${pendingSwap.assetOut.symbol}
+        `;
+        const responseContext = composeContext({
+            state,
+            template
+        });
+        const response = await generateText({
+            runtime: runtime,
+            context: responseContext,
+            modelClass: ModelClass.SMALL,
+        });
+        callback?.({
+            text: response,
+            content: {
+                success: false,
+                amountIn: pendingSwap.amountIn,
+                tokenIn: pendingSwap.assetIn.symbol,
+                tokenOut: pendingSwap.assetOut.symbol,
+            },
+        });
+
+        await runtime.cacheManager.delete("pendingStonSwap");
+        return;
+    }
+    const stonProvider = await initStonProvider(runtime);
+    const walletProvider = await initWalletProvider(runtime);
+    const tonConnectProvider = await initTonConnectProvider(runtime);
+    const action = new SwapAction(walletProvider, stonProvider, tonConnectProvider);
+    const { txHash, amountOut } = await action.swap(pendingSwap.assetIn, pendingSwap.assetOut, pendingSwap.amountIn);
+    
+    elizaLogger.success(`Successfully swapped ${pendingSwap.amountIn} ${pendingSwap.assetIn.symbol} for ${fromNano(amountOut)} ${pendingSwap.assetOut.symbol}, Transaction: ${txHash}`);
+    
+    const template = `
+    # Recent messages:
+    {{recentMessages}}
+    # Task: Write the response from {{agentName}} to communicate that the swap was successful.
+    It should be one paragraph and include the following information of the swap : 
+    - Input amount ${pendingSwap.amountIn}
+    - Output amount ${fromNano(amountOut)}, only if not zero, if zero indicate that in testnet the swap information is not retrieved
+    - Input token ${pendingSwap.assetIn.symbol}
+    - Output token ${pendingSwap.assetOut.symbol}
+    - Transaction hash ${txHash}
+    `;
+    const responseContext = composeContext({
+        state,
+        template
+    });
+    const response = await generateText({
+        runtime: runtime,
+        context: responseContext,
+        modelClass: ModelClass.SMALL,
+    });
+    callback?.({
+        text: response,
+        content: {
+            success: true,
+            hash: txHash,
+            amountIn: pendingSwap.amountIn,
+            amountOut: fromNano(amountOut),
+            tokenIn: pendingSwap.assetIn.symbol,
+            tokenOut: pendingSwap.assetOut.symbol,
+        },
+    });
+
+    await runtime.cacheManager.delete("pendingStonSwap");        
+}
+
+export const swapStonAction = {
     name: "SWAP_TOKEN_STON",
     similes: ["SWAP_TOKENS_STON"],
-    template: swapTemplate,
     validate: async (runtime: IAgentRuntime, message: Memory) => {
         elizaLogger.log("Validating config for user:", message.userId);
         await validateEnvConfig(runtime);
         return true;
     },
-    description: "Swap tokens in TON blockchain through STON.fi DEX",
-    //suppressInitialMessage: true,
+    description: `
+        Start a swap of tokens in TON blockchain through STON.fi DEX. 
+        Generates a pending swap that must be finished by using FINISH_SWAP_TOKEN_STON action.
+    `,
+    suppressInitialMessage: true,
     handler: async (
         runtime: IAgentRuntime,
         message: Memory,
@@ -297,74 +485,26 @@ export default {
         _options: { [key: string]: unknown },
         callback?: HandlerCallback,
     ) => {
-        // TODO: See how to push response to the interface before finishing the action
         try {
             elizaLogger.log("Starting SWAP handler...");
-    
-            elizaLogger.log("Handler initialized. Checking user authorization...");
 
-            const swapContent = await buildSwapDetails(
-                runtime,
-                message,
-                state,
-            );
-            // Validate transfer content
-            if (!isSwapContent(swapContent)) {
-                throw new Error("Invalid content for SWAP action.");
-            }
-            const stonProvider = await initStonProvider(runtime);
-            // Check if tokens are part of available assets and the pair of tokens is also defined
-            const [inTokenAsset, outTokenAsset] = await stonProvider.getAssets(
-                swapContent.tokenIn,
-                swapContent.tokenOut,
-                `(${AssetTag.LiquidityVeryHigh} | ${AssetTag.LiquidityHigh} | ${AssetTag.LiquidityMedium} ) & ${AssetTag.Popular} & ${AssetTag.DefaultSymbol}`
-            ) as [StonAsset, StonAsset];
-            const walletProvider = await initWalletProvider(runtime);
-            const tonConnectProvider = await initTonConnectProvider(runtime);
-            const action = new SwapAction(walletProvider, stonProvider, tonConnectProvider);
-            // TODO: require confirmation before processing the swap
-            const { txHash, amountOut } = await action.swap(inTokenAsset, outTokenAsset, swapContent.amountIn);
-            elizaLogger.success(`Successfully swapped ${swapContent.amountIn} ${swapContent.tokenIn} for ${fromNano(amountOut)} ${swapContent.tokenOut}, Transaction: ${txHash}`);
+            const pendingSwap = await runtime.cacheManager.get("pendingStonSwap");
 
-            const template = `
-            # Task: generate a dialog line from the character {{agentName}} to communicate {{user1}} that the swap was successful.
-            Avoid adding initial and final quotes.
-            The dialog line should be only one message and include the following information of the swap : 
-            - amountIn ${swapContent.amountIn}
-            - amountOut ${fromNano(amountOut)}, only if not zero, if zero indicate that in testnet the swap information is not retrieved
-            - tokenIn ${swapContent.tokenIn}
-            - tokenOut ${swapContent.tokenOut}
-            - hash ${txHash}
-            `;
-            const responseContext = composeContext({
-                state,
-                template
-            });
-            const response = await generateText({
-                runtime: runtime,
-                context: responseContext,
-                modelClass: ModelClass.SMALL,
-            });
+            if (pendingSwap) {
+                throw new Error("Pending swap, finish it before starting a new one");
+            } 
 
-            callback?.({
-                text: response,
-                content: {
-                    success: true,
-                    hash: txHash,
-                    amountIn: swapContent.amountIn,
-                    amountOut: fromNano(amountOut),
-                    tokenIn: swapContent.tokenIn,
-                    tokenOut: swapContent.tokenOut,
-                },
-            });
+            await handleSwapStart(runtime, message, state, callback);
             return true;
+    
         } catch (error) {
             elizaLogger.error("Error during token swap:", error);
 
-            const template = `
-            # Task: generate a dialog line from the character {{agentName}} to communicate {{user1}} that the swap failed due to ${error.message}.
-            The dialog line should be only one message and contain al the information of the error.
-            Avoid adding initial and final quotes.
+            const template = `  
+            # Recent messages:
+            {{recentMessages}}
+            # Task: Write the response from {{agentName}} to communicate that there was a problem with the swap due to ${error.message}.
+            It should be one paragraph and include the information of the error.
             `;
 
             const responseContext = composeContext({
@@ -400,7 +540,156 @@ export default {
             {
                 user: "{{agent}}",
                 content: {
-                    text: "Swapping 1 TON for USDC...",
+                    text: "Are you sure you want to swap 1 TON for USDC...",
+                    action: "SWAP_TOKEN_STON",
+                },
+            },
+            {
+                user: "{{user1}}",
+                content: {
+                    text: "Yes, I want to finish the swap",
+                },
+            },
+            {
+                user: "{{agent}}",
+                content: {
+                    text: "Ok, I will proceed with the swap...",
+                    action: "FINISH_SWAP_TOKENS_STON",
+                },
+            },
+            {
+                user: "{{agent}}",
+                content: {
+                    text: "Successfully swapped 1 TON for {{dynamic}} USDC, Transaction: {{dynamic}}",
+                },
+            },
+        ],
+        [
+            {
+                user: "{{user1}}",
+                content: {
+                    text: "Swap 1 TON for USDC",
+                },
+            },
+            {
+                user: "{{agent}}",
+                content: {
+                    text: "Are you sure you want to swap 1 TON for USDC...",
+                    action: "SWAP_TOKEN_STON",
+                },
+            },
+            {
+                user: "{{user1}}",
+                content: {
+                    text: "no, I decided not to do it",
+                },
+            },
+            {
+                user: "{{agent}}",
+                content: {
+                    text: "Ok, I will cancel the swap...",
+                    action: "FINISH_SWAP_TOKENS_STON",
+                },
+            },
+            {
+                user: "{{agent}}",
+                content: {
+                    text: "The swap has been canceled",
+                },
+            },
+        ],
+    ] as ActionExample[][],
+} as Action;
+
+export const finishSwapStonAction = {
+    name: "FINISH_SWAP_TOKEN_STON",
+    similes: ["FINISH_SWAP_TOKENS_STON"],
+    validate: async (runtime: IAgentRuntime, message: Memory) => {
+        elizaLogger.log("Validating config for user:", message.userId);
+        await validateEnvConfig(runtime);
+        return true;
+    },
+    description: `
+        Finish a pending swap of tokens in TON blockchain through STON.fi DEX. 
+        This must be called immediately after user confirms or cancels the swap.
+    `,
+    suppressInitialMessage: true,
+    handler: async (
+        runtime: IAgentRuntime,
+        message: Memory,
+        state: State,
+        _options: { [key: string]: unknown },
+        callback?: HandlerCallback,
+    ) => {
+        try {
+            elizaLogger.log("Starting FINISH SWAP handler...");
+
+            const pendingSwap = await runtime.cacheManager.get("pendingStonSwap");
+
+            if (!pendingSwap) {
+                throw new Error("No pending swap, start a new one first");
+            } 
+            
+            await handleSwapFinish(runtime, message, state, pendingSwap as IPendingSwapContent, callback);
+            return true;
+    
+        } catch (error) {
+            elizaLogger.error("Error during token swap:", error);
+
+            const template = `
+            # Recent messages:
+            {{recentMessages}}
+            # Task: Write the response from {{agentName}} to communicate that there was a problem with the swap due to ${error.message}.
+            It should be one paragraph and include the information of the error.
+            `;
+
+            const responseContext = composeContext({
+                state,
+                template
+            });
+
+            const response = await generateText({
+                runtime: runtime,
+                context: responseContext,
+                modelClass: ModelClass.SMALL,
+            });
+
+            await callback?.({
+                text: response,
+                error: {
+                    message: error.message,
+                    statusCode: error.response?.status,
+                }
+            });
+
+            return false;
+        }
+    },
+    examples: [
+        [
+            {
+                user: "{{user1}}",
+                content: {
+                    text: "Swap 1 TON for USDC",
+                },
+            },
+            {
+                user: "{{agent}}",
+                content: {
+                    text: "Are you sure you want to swap 1 TON for USDC...",
+                    action: "SWAP_TOKEN_STON",
+                },
+            },
+            {
+                user: "{{user1}}",
+                content: {
+                    text: "Yes, I want to finish the swap",
+                },
+            },
+            {
+                user: "{{agent}}",
+                content: {
+                    text: "Ok, I will proceed with the swap...",
                     action: "SWAP_TOKEN_STON",
                 },
             },
@@ -408,6 +697,152 @@ export default {
                 user: "{{agent}}",
                 content: {
                     text: "Successfully swapped 1 TON for {{dynamic}} USDC, Transaction: {{dynamic}}",
+                },
+            },
+        ],
+        [
+            {
+                user: "{{user1}}",
+                content: {
+                    text: "Swap 1 TON for USDC",
+                },
+            },
+            {
+                user: "{{agent}}",
+                content: {
+                    text: "Are you sure you want to swap 1 TON for USDC...",
+                    action: "SWAP_TOKEN_STON",
+                },
+            },
+            {
+                user: "{{user1}}",
+                content: {
+                    text: "no, I decided not to do it",
+                },
+            },
+            {
+                user: "{{agent}}",
+                content: {
+                    text: "Ok, I will cancel the swap...",
+                    action: "SWAP_TOKEN_STON",
+                },
+            },
+            {
+                user: "{{agent}}",
+                content: {
+                    text: "The swap has been canceled",
+                },
+            },
+        ],
+    ] as ActionExample[][],
+} as Action;
+
+
+
+export const getPendingStonSwapDetailsAction = {
+    name: "GET_PENDING_STON_SWAP_DETAILS",
+    similes: [],
+    validate: async (runtime: IAgentRuntime, message: Memory) => {
+        elizaLogger.log("Validating config for user:", message.userId);
+        await validateEnvConfig(runtime);
+        return true;
+    },
+    description: `
+        Get the details of the pending swap of tokens in TON blockchain through STON.fi DEX. 
+    `,
+    suppressInitialMessage: true,
+    handler: async (
+        runtime: IAgentRuntime,
+        message: Memory,
+        state: State,
+        _options: { [key: string]: unknown },
+        callback?: HandlerCallback,
+    ) => {
+        try {
+            elizaLogger.log("Starting GET PENDING SWAP DETAILS handler...");
+
+            const pendingSwapCache = await runtime.cacheManager.get("pendingStonSwap");
+
+            let template = ""
+            if (!pendingSwapCache) {
+                template = `
+                # Recent messages:
+                {{recentMessages}}
+                # Task: Write the response from {{agentName}} to communicate there is no pending swap. 
+                It should be one paragraph.
+                `;
+            } else {
+                const pendingSwap = pendingSwapCache as IPendingSwapContent;
+                template = `
+                # Recent messages:
+                {{recentMessages}}
+                # Task: Write the response from {{agentName}} to communicate the details of the pending swap.
+                It should be one paragraph and include the following information of the swap : 
+                - Input amount ${pendingSwap.amountIn}
+                - Input token ${pendingSwap.assetIn.symbol}
+                - Input token address ${pendingSwap.assetIn.contractAddress}
+                - Output token ${pendingSwap.assetOut.symbol}
+                - Output token address ${pendingSwap.assetOut.contractAddress}
+                `;
+            }
+            const responseContext = composeContext({
+                state,
+                template
+            });
+            const response = await generateText({
+                runtime: runtime,
+                context: responseContext,
+                modelClass: ModelClass.SMALL,
+            });
+            callback?.({text: response});            
+            
+            return true;
+    
+        } catch (error) {
+            elizaLogger.error("Error during token swap:", error);
+
+            const template = `
+            # Recent messages:
+            {{recentMessages}}  
+            # Task: Write the response from {{agentName}} to communicate that there was a problem getting the pending swap details due to ${error.message}.
+            It should be one paragraph and include the information of the error.
+            `;
+
+            const responseContext = composeContext({
+                state,
+                template
+            });
+
+            const response = await generateText({
+                runtime: runtime,
+                context: responseContext,
+                modelClass: ModelClass.SMALL,
+            });
+
+            await callback?.({
+                text: response,
+                error: {
+                    message: error.message,
+                    statusCode: error.response?.status,
+                }
+            });
+
+            return false;
+        }
+    },
+    examples: [
+        [
+            {
+                user: "{{user1}}",
+                content: {
+                    text: "What are the details of the pending swap?",
+                },
+            },
+            {
+                user: "{{agent}}",
+                content: {
+                    text: "The pending swap is 1 TON for USDC",
+                    action: "GET_PENDING_SWAP_DETAILS",
                 },
             },
         ],
