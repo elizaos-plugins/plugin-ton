@@ -21,20 +21,46 @@ This plugin provides functionality to:
 
 ### Screenshot
 
+#### Transfer TON
 ![ton transfer](./screenshot/transfer.png "Transfer TON")
+
+#### Transfer Jetton
 ![jetton transfer](./screenshot/jetton-transfer.png "Transfer Jetton")
+
+#### NFT Transfer
 ![nft transfer](./screenshot/nft-transfer.png "NFT Transfer")
+
+#### Batch Transfer (Jetton and TON)
 ![jetton and ton transfer](./screenshot/ton-jetton-batch-transfer.png "Transfer Jetton and TON")
+
+#### Connect with TonConnect QR Code
 ![](./screenshot/connect.png "Connect with TonConnect QR Code")
+
+#### TonConnect Status
 ![connection status](./screenshot/status.png "TonConnect Status")
+
+#### Disconnect
 ![disconnect](./screenshot/disconnect.png "Disconnect")
+
+#### NFT Transfer
 ![nft transfer](./screenshot/nft-transfer.png "NFT Transfer")
+
+#### NFT Mint
 ![nft mint](./screenshot/mint.png "NFT Mint")
+
+#### NFT Collection Data
 ![nft collection data](./screenshot/get-colleciton-data.png "NFT Collection Data")
 
+#### Lending Info for TON
 ![lending](./screenshot/lending_info.png "Get lending info for TON")
+
+#### NFT Listing and Cancellation
 ![nft listing and cancellation](./screenshot/nft-listing-and-cancel.png "NFT Listing Creation and Cancellation")
-![auction creation](./screenshot/nft-auctino.png "NFT Auction Creation")
+
+#### NFT Auction Creation
+![auction creation](./screenshot/nft-auction.png "NFT Auction Creation")
+
+#### NFT Bidding and Buying
 ![bidding and buying](./screenshot/nft-bid-and-buy.png "NFT Bidding and Buying")
 
 ### Quick Start
