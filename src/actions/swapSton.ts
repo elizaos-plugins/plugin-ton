@@ -10,7 +10,6 @@ import {
     type State,
     type ActionExample,
     type Action,
-    generateText,
     generateTrueOrFalse,
 } from "@elizaos/core";
 import { z } from "zod";
@@ -30,6 +29,7 @@ import { validateEnvConfig } from "../enviroment";
 import { type StonAsset, initStonProvider, type StonProvider } from "../providers/ston";
 import { initTonConnectProvider, type TonConnectProvider } from "../providers/tonConnect";
 import { CHAIN, type SendTransactionRequest } from "@tonconnect/sdk";
+import { replaceLastMemory } from "../utils/modifyMemories";
 
 export interface ISwapContent extends Content {
     tokenIn: string;
@@ -348,27 +348,11 @@ async function handleSwapStart(
     - Input token ${inTokenAsset.symbol}
     - Output token ${outTokenAsset.symbol}
     `;
-    const responseContext = composeContext({
-        state,
-        template
-    });
-    const response = await generateText({
-        runtime: runtime,
-        context: responseContext,
-        modelClass: ModelClass.SMALL,
-    });
 
-    callback?.({
-        text: response,
-        content: { 
-            pendingStonSwap: {
-                amountIn: swapContent.amountIn,
-                assetIn: inTokenAsset,
-                assetOut: outTokenAsset,
-            }
-        },
-    });
+    const response = await replaceLastMemory(runtime, state, template);
 
+    callback?.(response.content);
+    
     await runtime.cacheManager.set("pendingStonSwap", {
         amountIn: swapContent.amountIn,
         assetIn: inTokenAsset,
@@ -400,24 +384,10 @@ async function handleSwapFinish(
         - Input token ${pendingSwap.assetIn.symbol}
         - Output token ${pendingSwap.assetOut.symbol}
         `;
-        const responseContext = composeContext({
-            state,
-            template
-        });
-        const response = await generateText({
-            runtime: runtime,
-            context: responseContext,
-            modelClass: ModelClass.SMALL,
-        });
-        callback?.({
-            text: response,
-            content: {
-                success: false,
-                amountIn: pendingSwap.amountIn,
-                tokenIn: pendingSwap.assetIn.symbol,
-                tokenOut: pendingSwap.assetOut.symbol,
-            },
-        });
+
+        const response = await replaceLastMemory(runtime, state, template);
+
+        callback?.(response.content);
 
         await runtime.cacheManager.delete("pendingStonSwap");
         return;
@@ -441,26 +411,9 @@ async function handleSwapFinish(
     - Output token ${pendingSwap.assetOut.symbol}
     - Transaction hash ${txHash}
     `;
-    const responseContext = composeContext({
-        state,
-        template
-    });
-    const response = await generateText({
-        runtime: runtime,
-        context: responseContext,
-        modelClass: ModelClass.SMALL,
-    });
-    callback?.({
-        text: response,
-        content: {
-            success: true,
-            hash: txHash,
-            amountIn: pendingSwap.amountIn,
-            amountOut: fromNano(amountOut),
-            tokenIn: pendingSwap.assetIn.symbol,
-            tokenOut: pendingSwap.assetOut.symbol,
-        },
-    });
+    const response = await replaceLastMemory(runtime, state, template);
+
+    callback?.(response.content);
 
     await runtime.cacheManager.delete("pendingStonSwap");        
 }
@@ -495,6 +448,7 @@ export const swapStonAction = {
             } 
 
             await handleSwapStart(runtime, message, state, callback);
+
             return true;
     
         } catch (error) {
@@ -507,24 +461,9 @@ export const swapStonAction = {
             It should be one paragraph and include the information of the error.
             `;
 
-            const responseContext = composeContext({
-                state,
-                template
-            });
+            const response = await replaceLastMemory(runtime, state, template);
 
-            const response = await generateText({
-                runtime: runtime,
-                context: responseContext,
-                modelClass: ModelClass.SMALL,
-            });
-
-            await callback?.({
-                text: response,
-                error: {
-                    message: error.message,
-                    statusCode: error.response?.status,
-                }
-            });
+            await callback?.(response.content);
 
             return false;
         }
@@ -643,24 +582,9 @@ export const finishSwapStonAction = {
             It should be one paragraph and include the information of the error.
             `;
 
-            const responseContext = composeContext({
-                state,
-                template
-            });
+            const response = await replaceLastMemory(runtime, state, template);
 
-            const response = await generateText({
-                runtime: runtime,
-                context: responseContext,
-                modelClass: ModelClass.SMALL,
-            });
-
-            await callback?.({
-                text: response,
-                error: {
-                    message: error.message,
-                    statusCode: error.response?.status,
-                }
-            });
+            await callback?.(response.content);
 
             return false;
         }
@@ -785,16 +709,9 @@ export const getPendingStonSwapDetailsAction = {
                 - Output token address ${pendingSwap.assetOut.contractAddress}
                 `;
             }
-            const responseContext = composeContext({
-                state,
-                template
-            });
-            const response = await generateText({
-                runtime: runtime,
-                context: responseContext,
-                modelClass: ModelClass.SMALL,
-            });
-            callback?.({text: response});            
+            const response = await replaceLastMemory(runtime, state, template);
+
+            await callback?.(response.content);           
             
             return true;
     
@@ -808,24 +725,9 @@ export const getPendingStonSwapDetailsAction = {
             It should be one paragraph and include the information of the error.
             `;
 
-            const responseContext = composeContext({
-                state,
-                template
-            });
+            const response = await replaceLastMemory(runtime, state, template);
 
-            const response = await generateText({
-                runtime: runtime,
-                context: responseContext,
-                modelClass: ModelClass.SMALL,
-            });
-
-            await callback?.({
-                text: response,
-                error: {
-                    message: error.message,
-                    statusCode: error.response?.status,
-                }
-            });
+            await callback?.(response.content);
 
             return false;
         }
