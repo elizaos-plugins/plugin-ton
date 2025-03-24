@@ -21,20 +21,46 @@ This plugin provides functionality to:
 
 ### Screenshot
 
+#### Transfer TON
 ![ton transfer](./screenshot/transfer.png "Transfer TON")
+
+#### Transfer Jetton
 ![jetton transfer](./screenshot/jetton-transfer.png "Transfer Jetton")
+
+#### NFT Transfer
 ![nft transfer](./screenshot/nft-transfer.png "NFT Transfer")
+
+#### Batch Transfer (Jetton and TON)
 ![jetton and ton transfer](./screenshot/ton-jetton-batch-transfer.png "Transfer Jetton and TON")
+
+#### Connect with TonConnect QR Code
 ![](./screenshot/connect.png "Connect with TonConnect QR Code")
+
+#### TonConnect Status
 ![connection status](./screenshot/status.png "TonConnect Status")
+
+#### Disconnect
 ![disconnect](./screenshot/disconnect.png "Disconnect")
+
+#### NFT Transfer
 ![nft transfer](./screenshot/nft-transfer.png "NFT Transfer")
+
+#### NFT Mint
 ![nft mint](./screenshot/mint.png "NFT Mint")
+
+#### NFT Collection Data
 ![nft collection data](./screenshot/get-colleciton-data.png "NFT Collection Data")
 
+#### Lending Info for TON
 ![lending](./screenshot/lending_info.png "Get lending info for TON")
+
+#### NFT Listing and Cancellation
 ![nft listing and cancellation](./screenshot/nft-listing-and-cancel.png "NFT Listing Creation and Cancellation")
-![auction creation](./screenshot/nft-auctino.png "NFT Auction Creation")
+
+#### NFT Auction Creation
+![auction creation](./screenshot/nft-auction.png "NFT Auction Creation")
+
+#### NFT Bidding and Buying
 ![bidding and buying](./screenshot/nft-bid-and-buy.png "NFT Bidding and Buying")
 ![STON swap confirmed](./screenshot/ston-swap-confirmed.png "Swap with STON")
 
@@ -94,9 +120,11 @@ export default {
 };
 ```
 
-## Features
+## Core Features
 
-### WalletProvider
+### Wallet Management
+
+#### WalletProvider
 
 The `WalletProvider` manages wallet operations and portfolio tracking:
 
@@ -111,11 +139,36 @@ const balance = await provider.getWalletBalance();
 
 // Get formatted portfolio
 const portfolio = await provider.getFormattedPortfolio(runtime);
+
+// Get wallet client for contract interactions
+const client = provider.getWalletClient();
+
+// Get wallet address
+const address = provider.getAddress();
 ```
 
-### TonConnectProvider
+#### Create Ton Wallet
 
-The `TonConnectProvider` manages wallet connection operations:
+Create a new TON wallet with encrypted key storage:
+
+```typescript
+import { CreateTonWallet } from "@elizaos/plugin-ton";
+
+// Initialize wallet creation action
+const action = new CreateTonWallet(runtime);
+
+// Create a new wallet with encryption
+const { walletAddress, mnemonic } = await action.createNewWallet({
+  rpcUrl: "https://toncenter.com/api/v2/jsonRPC",
+  encryptionPassword: "your-secure-password",
+});
+```
+
+### Wallet Connectivity
+
+#### TonConnect Integration
+
+Connect to external wallets using TonConnect protocol:
 
 ```typescript
 import { TonConnectProvider } from "@elizaos/plugin-ton-connect";
@@ -123,19 +176,24 @@ import { TonConnectProvider } from "@elizaos/plugin-ton-connect";
 // Initialize provider
 const provider = await initTonConnectProvider(runtime);
 
-// Connect wallet
+// Connect wallet - returns a universal link or QR code data
 const universalLink = await provider.connect();
 
 // Check connection status
 const isConnected = provider.isConnected();
 
-// Disconnect
+// Get wallet connection details
+const status = provider.formatConnectionStatus(runtime);
+
+// Disconnect wallet
 await provider.disconnect();
 ```
 
-### TransferAction
+### Token Operations
 
-The `TransferAction` handles token transfers:
+#### TON Transfer
+
+Send native TON tokens:
 
 ```typescript
 import { TransferAction } from "@elizaos/plugin-ton";
@@ -150,97 +208,292 @@ const hash = await action.transfer({
 });
 ```
 
-### BatchTransferAction
+#### Jetton (Token) Transfer
 
-The `BatchTransferAction` handles transfers of NFTs, Jettons and TON in a single transaction:
-![batch-transfer-image](images/Screenshot-batch-transfer.png)
+Transfer Jetton tokens:
+
+```typescript
+import { JettonInteractionAction } from "@elizaos/plugin-ton";
+
+// Initialize jetton interaction
+const jettonAction = new JettonInteractionAction(walletProvider);
+
+// Transfer jettons
+const result = await jettonAction.transfer(
+  "1.5", // Amount
+  "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4", // Recipient
+  "EQBlqsm144Dq6SjbPI4jjZvA1hqTIP3CvHovbIfW_t-SCALE" // Jetton master address
+);
+```
+
+#### Batch Transfers
+
+Transfer multiple tokens in a single transaction:
 
 ```typescript
 import { BatchTransferTokens } from "@elizaos/plugin-ton";
 
-// Initialize transfer action
+// Initialize batch transfer action
 const action = new BatchTransferTokens(walletProvider);
+
+// Define batch transfers
 const batchTransfers = {
   transfers: [
     {
       type: "ton",
       recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
-      amount: "0.1",
+      amount: "0.1", // TON amount
     },
     {
       type: "token",
       recipientAddress: "0QBLy_5Fr6f8NSpMt8SmPGiItnUE0JxgTJZ6m6E8aXoLtJHB",
-      tokenInd: "0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5",
-      amount: "1",
+      tokenInd: "0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5", // Jetton address
+      amount: "1", // Jetton amount
     },
   ],
 };
-const reports = await batchTransferAction.createBatchTransfer(batchTransfers);
+
+// Execute batch transfer
+const reports = await action.createBatchTransfer(batchTransfers);
 ```
 
-### Create Ton Wallet Action
+### NFT Operations
 
-The `CreateTonWallet` action handles on-demand wallet creation with encrypted key storage from user-supplied encryption key:
+#### Transfer NFT
+
+Transfer NFT ownership to a new address:
 
 ```typescript
-import { CreateTonWallet } from "@elizaos/plugin-ton";
+import { TransferNFTAction } from "@elizaos/plugin-ton";
 
-// Initialize transfer action
-const action = new CreateTonWallet(runtime);
+// Initialize NFT transfer action
+const transferAction = new TransferNFTAction(walletProvider);
 
-// Execute transfer
-const { walletAddress, mnemonic } = await action.createNewWallet({
-  rpcUrl: "https://toncenter.com/api/v2/jsonRPC",
-  encryptionPassword: "GAcAWFv6ZXuaJOuSqemxku4",
+// Transfer NFT ownership
+const result = await transferAction.transfer({
+  nftAddress: "0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5",
+  newOwner: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4"
 });
 ```
 
-### Auction Interaction Action
-The `AuctionInteractionTon` action handles Auction interactions
-![auction-data](screenshit/auction-data.png)
+#### Mint NFT
+
+Create a new NFT or mint one inside an existing collection:
+
 ```typescript
-import { AuctionInteractionActionTon } from "@elizaos/plugin-ton";
+import { MintNFTAction } from "@elizaos/plugin-ton";
 
-// Initialize transfer action
-const action = new AuctionInteractionActionTon(walletProvider);
-
-result = await auctionAction.getAuctionData(auctionAddress);
-```
-
-### Get Collection Data Action
-The `GetCollectionData` action shows information about NFT collection
-![collection-data](screenshot/get-colleciton-data.png.png)
-```typescript
-import { GetCollectionData } from "@elizaos/plugin-ton";
-
-// Initialize transfer action
-const getCollectionDataAction = new GetCollectionDataAction(walletProvider);
-const collectionData = await getCollectionDataAction.getData(collectionAddress);
-```
-
-### Mint NFT Action
-The `MintNFT` action is responsible for minting a new collection or NFT inside collection
-![mint-nft](screenshot/mint.png)
-```typescript
-import { MintNFT } from "@elizaos/plugin-ton";
-
+// Initialize NFT minting action
 const mintNFTAction = new MintNFTAction(walletProvider);
+
+// Define mint parameters
+const mintParams = {
+  collectionAddress: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4", // Optional - if minting to existing collection
+  contentUri: "https://example.com/nft-metadata.json",
+  royaltyPercent: 5, // 5% royalty fee
+  ownerAddress: "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4" // Optional - defaults to wallet address
+};
+
+// Mint NFT
 const nftAddress = await mintNFTAction.mint(mintParams);
 ```
 
-### Transfer NFT Action
-The `transferNFTAction` action is responsible for transfering the ownership of an NFT within a collection
-![transfer-nft](screenshot/nft-ownership-transfer.png)
-```typescript
-import { TransferNFT } from "@elizaos/plugin-ton";
+#### Get NFT Collection Data
 
-const transferAction = new TransferNFTAction(walletProvider);
-const transferDetails = {
-  "nftAddress": "0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5",
-  "newOwner": "EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4"
-};
-await transferAction.transfer(transferDetails);
+Retrieve information about an NFT collection:
+
+```typescript
+import { GetCollectionDataAction } from "@elizaos/plugin-ton";
+
+// Initialize get collection data action
+const getCollectionDataAction = new GetCollectionDataAction(walletProvider);
+
+// Get collection data
+const collectionData = await getCollectionDataAction.getData("EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4");
 ```
+
+### Marketplace Operations
+
+#### Create NFT Listing
+
+List an NFT for sale:
+
+```typescript
+import { CreateListingAction } from "@elizaos/plugin-ton";
+
+// Initialize listing action
+const listingAction = new CreateListingAction(walletProvider);
+
+// Create a listing
+const listingResult = await listingAction.list({
+  nftAddress: "0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5",
+  fullPrice: "10", // Price in TON
+});
+```
+
+#### Create NFT Auction
+
+Create an NFT auction:
+
+```typescript
+import { CreateAuctionAction } from "@elizaos/plugin-ton";
+
+// Initialize auction action
+const auctionAction = new CreateAuctionAction(walletProvider);
+
+// Create an auction
+const auctionResult = await auctionAction.createAuction({
+  nftAddress: "0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5",
+  minimumBid: "5", // Minimum bid in TON
+  maximumBid: "20", // Buy now price in TON
+  expiryTime: "24", // Auction duration in hours
+});
+```
+
+#### Get Auction Data
+
+Retrieve information about an NFT auction:
+
+```typescript
+import { AuctionInteractionAction } from "@elizaos/plugin-ton";
+
+// Initialize auction interaction
+const auctionAction = new AuctionInteractionAction(walletProvider);
+
+// Get auction data
+const auctionData = await auctionAction.getAuctionData("0QDIUnzAEsgHLL7YSrvm_u7OYSKw93AQbtdidRdcbm7tQep5");
+```
+
+### DEX Integration
+
+#### Swap Tokens
+
+Swap tokens using the STON.fi DEX:
+
+```typescript
+import { SwapAction } from "@elizaos/plugin-ton";
+
+// Initialize swap action
+const swapAction = new SwapAction(walletProvider);
+
+// Define assets for swap
+const tonAsset = { kind: "Ton" };
+const jettonAsset = { 
+  kind: "Jetton", 
+  contractAddress: "EQBlqsm144Dq6SjbPI4jjZvA1hqTIP3CvHovbIfW_t-SCALE" 
+};
+
+// Swap TON for Jetton
+const swapResult = await swapAction.swap(tonAsset, jettonAsset, "1.5");
+
+// Swap Jetton for TON
+const swapBackResult = await swapAction.swap(jettonAsset, tonAsset, "10");
+```
+
+#### Manage Liquidity
+
+Add liquidity to DEX pools:
+
+```typescript
+import { DexAction, DexProvider } from "@elizaos/plugin-ton";
+
+// Initialize DEX provider and action
+const dexProvider = new DexProvider(walletProvider);
+const dexAction = new DexAction(walletProvider, dexProvider);
+
+// Define deposit parameters for Ston.fi
+const depositDetails = {
+  operation: "deposit",
+  dex: "stonfi",
+  jettonDeposits: [
+    {
+      jetton: { address: "EQBlqsm144Dq6SjbPI4jjZvA1hqTIP3CvHovbIfW_t-SCALE" },
+      amount: 10
+    }
+  ],
+  tonAmount: 1.5
+};
+
+// Execute deposit
+const txHash = await dexAction.run(depositDetails);
+
+// Define withdrawal parameters
+const withdrawDetails = {
+  operation: "withdraw",
+  dex: "stonfi",
+  jettonWithdrawals: [
+    {
+      jetton: { address: "EQBlqsm144Dq6SjbPI4jjZvA1hqTIP3CvHovbIfW_t-SCALE" }
+    }
+  ],
+  isTon: true,
+  amount: 0.5
+};
+
+// Execute withdrawal
+const withdrawHash = await dexAction.run(withdrawDetails);
+```
+
+### Lending & Borrowing
+
+#### Get Lending Information
+
+Get lending information for a wallet:
+
+```typescript
+import { GetLendingInfoAction } from "@elizaos/plugin-ton";
+
+// Initialize lending info action
+const lendingInfoAction = new GetLendingInfoAction(walletProvider);
+
+// Get lending information for an address
+const lendingInfo = await lendingInfoAction.getLendingInfo("EQCGScrZe1xbyWqWDvdI6mzP-GAcAWFv6ZXuaJOuSqemxku4");
+
+// Example response:
+// {
+//   borrowBalance: "50",
+//   supplyBalance: "10",
+//   availableToBorrow: "30.5",
+//   debtLimitUsed: "39",
+//   healthFactor: "0.32"
+// }
+```
+
+## Advanced Features
+
+### Price Information
+
+#### Get Token Price
+
+Get price information for tokens:
+
+```typescript
+import { TokenPriceProvider } from "@elizaos/plugin-ton";
+
+// Initialize token price provider
+const priceProvider = await initTokenPriceProvider(runtime);
+
+// Get TON price in USD
+const tonPrice = await priceProvider.getNativeTokenPriceInUsd();
+
+// Get Jetton price in USD
+const jettonPrice = await priceProvider.getJettonPriceInUsd("EQBlqsm144Dq6SjbPI4jjZvA1hqTIP3CvHovbIfW_t-SCALE");
+```
+
+### Query Asset Information
+
+Get detailed information about assets on STON.fi DEX:
+
+```typescript
+import { QueryStonAssetAction } from "@elizaos/plugin-ton";
+
+// Initialize query asset action
+const queryAction = new QueryStonAssetAction(walletProvider);
+
+// Query asset information
+const assetInfo = await queryAction.query("EQBlqsm144Dq6SjbPI4jjZvA1hqTIP3CvHovbIfW_t-SCALE");
+```
+
 ## Development
 
 ### Building
@@ -261,6 +514,8 @@ npm run test
 - `@ston-fi/sdk`: SDK for STON.fi DEX
 - `@ton/ton`: Core TON blockchain functionality
 - `@ton/crypto`: Cryptographic operations
+- `@torch-finance/core`: Torch Finance Core functionality
+- `@dedust/sdk`: Dedust DEX SDK
 - `bignumber.js`: Precise number handling
 - `node-cache`: Caching functionality
 - Other standard dependencies listed in package.json
