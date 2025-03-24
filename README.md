@@ -36,6 +36,7 @@ This plugin provides functionality to:
 ![nft listing and cancellation](./screenshot/nft-listing-and-cancel.png "NFT Listing Creation and Cancellation")
 ![auction creation](./screenshot/nft-auctino.png "NFT Auction Creation")
 ![bidding and buying](./screenshot/nft-bid-and-buy.png "NFT Bidding and Buying")
+![STON swap confirmed](./screenshot/ston-swap-confirmed.png "Swap with STON")
 
 ### Quick Start
 

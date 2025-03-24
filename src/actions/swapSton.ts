@@ -704,9 +704,9 @@ export const getPendingStonSwapDetailsAction = {
                 It should be one paragraph and include the following information of the swap : 
                 - Input amount ${pendingSwap.amountIn}
                 - Input token ${pendingSwap.assetIn.symbol}
-                - Input token address ${pendingSwap.assetIn.contractAddress}
+                - Address of the input token contract ${pendingSwap.assetIn.contractAddress}
                 - Output token ${pendingSwap.assetOut.symbol}
-                - Output token address ${pendingSwap.assetOut.contractAddress}
+                - Address of the output token contract ${pendingSwap.assetOut.contractAddress}
                 `;
             }
             const response = await replaceLastMemory(runtime, state, template);
