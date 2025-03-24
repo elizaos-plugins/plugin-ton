@@ -63,6 +63,13 @@ This plugin provides functionality to:
 #### NFT Bidding and Buying
 ![bidding and buying](./screenshot/nft-bid-and-buy.png "NFT Bidding and Buying")
 
+#### SWAP with STON
+##### Start SWAP | in between query of pending swap information | Finish swap
+![STON swap confirmed](./screenshot/ston-swap-confirmed.png "Swap with STON confirmed")
+
+##### Start SWAP | Cancel swap
+![STON swap cancelled](./screenshot/ston-swap-cancelled.png "Swap with STON cancelled")
+
 ### Quick Start
 
 ```bash
