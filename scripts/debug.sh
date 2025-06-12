@@ -29,8 +29,7 @@ fi
 # check the content
 grep -C 4 'let characters = ' agent/src/index.ts
 
-# add below to the root package.json to fix https://github.com/elizaOS/eliza/issues/1965
-jq '. + { "resolutions": { "agent-twitter-client": "github:timmyg/agent-twitter-client#main" } }' package.json  > tmp.json && mv tmp.json package.json
+# Note: Previously resolved https://github.com/elizaOS/eliza/issues/1965 - no longer needed
 
 pnpm install --no-frozen-lockfile
 
